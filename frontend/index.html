@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sincro.space - Painel de Controle</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <div id="login-section">
+            <h1>Bem-vindo ao Sincro.space</h1>
+            <p>Faça login para conectar seu Clone Digital.</p>
+            <a href="http://localhost:3000/api/auth/google" class="google-btn">Entrar com Google</a>
+        </div>
+
+        <div id="app-section" class="hidden">
+            <h1>Painel de Controle</h1>
+            
+            <div id="status-indicator">
+                <span id="status-dot" class="status-dot offline"></span>
+                <span id="status-text">Desconectado</span>
+            </div>
+
+            <button id="connect-btn">Conectar WhatsApp</button>
+            <div id="qr-container"></div>
+
+            <div id="persona-editor">
+                <h2>Persona da IA</h2>
+                <textarea id="persona-textarea" rows="10" placeholder="Descreva aqui a personalidade do seu clone digital..."></textarea>
+                <button id="save-persona-btn">Salvar Persona</button>
+                <p id="save-feedback" class="feedback hidden">Salvo com sucesso!</p>
+            </div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

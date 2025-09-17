@@ -1,4 +1,7 @@
-// script.js - Versão 3.1 com Painel de Controle (Lógica do Botão Corrigida)
+// script.js - Versão 3.2 (Pronto para Deploy)
+
+// NOVO: Definimos a URL do nosso backend em um só lugar
+const API_BASE_URL = 'https://app-sincro-space.onrender.com';
 
 // Seleciona todos os elementos da página que vamos usar
 const loginSection = document.getElementById('login-section');
@@ -19,7 +22,8 @@ async function fetchStatus() {
     if (!token) return;
 
     try {
-        const response = await fetch('http://localhost:3000/api/sessions/status', {
+        // Usa a nova constante da API
+        const response = await fetch(`${API_BASE_URL}/api/sessions/status`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         const data = await response.json();
@@ -28,7 +32,7 @@ async function fetchStatus() {
             statusDot.classList.remove('offline');
             statusDot.classList.add('online');
             statusText.textContent = 'Conectado';
-            connectBtn.classList.add('hidden'); // Esconde o botão se já está conectado
+            connectBtn.classList.add('hidden');
         } else {
             statusDot.classList.remove('online');
             statusDot.classList.add('offline');
@@ -46,7 +50,8 @@ async function fetchPersona() {
     if (!token) return;
 
     try {
-        const response = await fetch('http://localhost:3000/api/config/persona', {
+        // Usa a nova constante da API
+        const response = await fetch(`${API_BASE_URL}/api/config/persona`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         const data = await response.json();
@@ -64,7 +69,8 @@ savePersonaBtn.addEventListener('click', async () => {
     const newPersona = personaTextarea.value;
     
     try {
-        const response = await fetch('http://localhost:3000/api/config/persona', {
+        // Usa a nova constante da API
+        const response = await fetch(`${API_BASE_URL}/api/config/persona`, {
             method: 'PUT',
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -76,7 +82,7 @@ savePersonaBtn.addEventListener('click', async () => {
         const data = await response.json();
         if (data.success) {
             saveFeedback.classList.remove('hidden');
-            setTimeout(() => saveFeedback.classList.add('hidden'), 2000); // Mostra "Salvo!" por 2 segundos
+            setTimeout(() => saveFeedback.classList.add('hidden'), 2000);
         } else {
             alert(data.message);
         }
@@ -105,7 +111,6 @@ document.addEventListener('DOMContentLoaded', () => {
 function showAppSection() {
     loginSection.classList.add('hidden');
     appSection.classList.remove('hidden');
-    // Assim que mostrar o painel, busca os dados do usuário
     fetchStatus();
     fetchPersona();
 }
@@ -116,7 +121,7 @@ function showLoginSection() {
     appSection.classList.add('hidden');
 }
 
-// >>>>> LÓGICA COMPLETA RESTAURADA AQUI <<<<<
+// Lógica do botão de Conectar WhatsApp
 connectBtn.addEventListener('click', async () => {
     console.log('Botão de conectar clicado!');
     connectBtn.textContent = 'Gerando QR Code...';
@@ -131,7 +136,8 @@ connectBtn.addEventListener('click', async () => {
     }
     
     try {
-        const response = await fetch('http://localhost:3000/api/sessions/start', {
+        // Usa a nova constante da API
+        const response = await fetch(`${API_BASE_URL}/api/sessions/start`, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`

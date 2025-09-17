@@ -1,4 +1,4 @@
-// server.js - Versão 3.5 (DEFINITIVO E 100% COMPLETO): URLs de Produção
+// server.js - Versão 3.6 (100% COMPLETO): Envia mensagem em vez de responder
 
 // PARTE 0: Configuração de Ambiente
 require('dotenv').config();
@@ -47,7 +47,6 @@ const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro-latest" });
 const oAuth2Client = new OAuth2Client(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
-    // A URL de callback agora aponta para nosso backend na Render
     `${process.env.BACKEND_URL}/api/auth/google/callback`
 );
 
@@ -185,13 +184,9 @@ app.get('/api/auth/google/callback', async (req, res) => {
             process.env.JWT_SECRET,
             { expiresIn: '7d' }
         );
-        
-        // Redireciona para o frontend na Vercel com o token
         res.redirect(`${process.env.FRONTEND_URL}?token=${accessToken}`);
-
     } catch (error) {
         console.error('[ERRO GOOGLE AUTH]', error);
-        // Redireciona para o frontend na Vercel em caso de erro
         res.redirect(`${process.env.FRONTEND_URL}?error=auth_failed`);
     }
 });
@@ -282,7 +277,10 @@ app.post('/api/sessions/start', authenticateToken, async (req, res) => {
         console.log('>>> Pensando com a persona do banco...');
         const aiResponse = await getAIResponse(message.body, clientId);
         console.log(`<<< Resposta da IA: "${aiResponse}"`);
-        await message.reply(aiResponse);
+
+        // >>>>> LINHA ALTERADA AQUI <<<<<
+        await client.sendMessage(message.from, aiResponse); // Usa client.sendMessage em vez de message.reply
+
         console.log('>>> Resposta enviada com sucesso!');
         console.log('-----------------------------------------');
     });

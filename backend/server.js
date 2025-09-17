@@ -1,4 +1,4 @@
-// server.js - Versão 3.4 (100% COMPLETO): IA com Persona do Banco de Dados
+// server.js - Versão 3.5 (DEFINITIVO E 100% COMPLETO): URLs de Produção
 
 // PARTE 0: Configuração de Ambiente
 require('dotenv').config();
@@ -43,28 +43,23 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro-latest" });
 
-// Configuração do Cliente OAuth do Google
+// Configuração do Cliente OAuth do Google (com URL de produção)
 const oAuth2Client = new OAuth2Client(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
-    'http://localhost:3000/api/auth/google/callback'
+    // A URL de callback agora aponta para nosso backend na Render
+    `${process.env.BACKEND_URL}/api/auth/google/callback`
 );
 
 // Função de IA MODIFICADA para usar a persona do banco de dados
 async function getAIResponse(messageText, userId) {
     try {
-        // 1. Busca a persona do usuário no banco de dados
         const personaResult = await pool.query("SELECT ai_persona FROM users WHERE id = $1", [userId]);
-        
         if (personaResult.rows.length === 0) {
             return "Desculpe, não encontrei uma persona configurada para você.";
         }
-
         const persona = personaResult.rows[0].ai_persona;
-
-        // 2. Monta o prompt final usando a persona do banco
         const prompt = `${persona}\n\nResponda a seguinte mensagem:\n"${messageText}"`;
-        
         const result = await model.generateContent(prompt);
         const response = await result.response;
         const text = response.text();
@@ -190,10 +185,14 @@ app.get('/api/auth/google/callback', async (req, res) => {
             process.env.JWT_SECRET,
             { expiresIn: '7d' }
         );
-        res.redirect(`http://localhost:5500/index.html?token=${accessToken}`);
+        
+        // Redireciona para o frontend na Vercel com o token
+        res.redirect(`${process.env.FRONTEND_URL}?token=${accessToken}`);
+
     } catch (error) {
         console.error('[ERRO GOOGLE AUTH]', error);
-        res.redirect('http://localhost:5500/index.html?error=auth_failed');
+        // Redireciona para o frontend na Vercel em caso de erro
+        res.redirect(`${process.env.FRONTEND_URL}?error=auth_failed`);
     }
 });
 

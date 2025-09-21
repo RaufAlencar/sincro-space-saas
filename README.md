@@ -1,10 +1,5 @@
 
-### Como Usar:
 
-1.  No seu projeto (no VS Code, por exemplo), crie um novo arquivo na pasta principal chamado `README.md`.
-2.  Copie todo o texto abaixo e cole nesse arquivo.
-3.  Substitua os links de imagem de exemplo pelos seus próprios (como uma screenshot do painel funcionando).
-4.  Faça o commit e o push para o Git. Seu GitHub ficará com uma aparência excelente\!
 
 -----
 

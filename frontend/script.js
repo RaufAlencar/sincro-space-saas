@@ -231,6 +231,7 @@ function showAppSection() {
     fetchPersona();
     loadBlocklist();
     loadContacts();
+    setInterval(fetchStatus, 5000); 
 }
 
 function showLoginSection() {

@@ -1,4 +1,4 @@
-// server.js - Versão 3.6 (100% COMPLETO): Envia mensagem em vez de responder
+// server.js - Versão 4.0: Memória de Curto Prazo e Preparação para Novas Features
 
 // PARTE 0: Configuração de Ambiente
 require('dotenv').config();
@@ -29,7 +29,7 @@ app.use(cors(corsOptions));
 // Configuração da Conexão com o Banco de Dados
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-ssl: {
+    ssl: {
         rejectUnauthorized: false
     }
 });
@@ -43,9 +43,9 @@ async function testDBConnection() {
     }
 }
 
+// NOVO: Estrutura de sessões aprimorada para guardar históricos de chat
 const sessions = new Map();
 
-// Chaves de API lidas do arquivo .env
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY; 
 
 // Configuração do modelo de IA
@@ -59,15 +59,20 @@ const oAuth2Client = new OAuth2Client(
     `${process.env.BACKEND_URL}/api/auth/google/callback`
 );
 
-// Função de IA MODIFICADA para usar a persona do banco de dados
-async function getAIResponse(messageText, userId) {
+// NOVO: Função de IA aprimorada para usar o histórico da conversa
+async function getAIResponse(chatHistory, userId) {
     try {
         const personaResult = await pool.query("SELECT ai_persona FROM users WHERE id = $1", [userId]);
         if (personaResult.rows.length === 0) {
             return "Desculpe, não encontrei uma persona configurada para você.";
         }
         const persona = personaResult.rows[0].ai_persona;
-        const prompt = `${persona}\n\nResponda a seguinte mensagem:\n"${messageText}"`;
+
+        // Formata o histórico para a IA entender
+        const formattedHistory = chatHistory.map(msg => `${msg.role}: ${msg.content}`).join('\n');
+        
+        const prompt = `${persona}\n\nA seguir está o histórico da conversa. Responda à última mensagem do "user" de forma natural e contextual.\n\n${formattedHistory}`;
+        
         const result = await model.generateContent(prompt);
         const response = await result.response;
         const text = response.text();
@@ -200,6 +205,7 @@ app.get('/api/auth/google/callback', async (req, res) => {
     }
 });
 
+
 // =================================================================
 // --- CONFIG ENDPOINTS ---
 // =================================================================
@@ -234,7 +240,7 @@ app.put('/api/config/persona', authenticateToken, async (req, res) => {
 });
 
 // =================================================================
-// --- SESSIONS ENDPOINTS (Protegidos) ---
+// --- SESSIONS ENDPOINTS (Com Grandes Melhorias) ---
 // =================================================================
 
 app.get('/api/health', (req, res) => {
@@ -251,6 +257,13 @@ app.post('/api/sessions/start', authenticateToken, async (req, res) => {
         authStrategy: new LocalAuth({ clientId: `session-${clientId}` }),
         puppeteer: { headless: true, args: ['--no-sandbox'] }
     });
+    
+    // NOVO: Estrutura para guardar cliente e históricos
+    sessions.set(clientId, {
+        client: client,
+        chatHistories: new Map() // Um mapa para cada contato (ex: '5541...': [histórico])
+    });
+
     let qrSent = false;
     client.on('qr', async (qr) => {
         if (qrSent) return;
@@ -268,37 +281,59 @@ app.post('/api/sessions/start', authenticateToken, async (req, res) => {
             }
         }
     });
+    
     client.on('ready', () => {
         console.log(`[Usuário ID: ${clientId}] Cliente está pronto e conectado!`);
         if (!res.headersSent && !qrSent) {
              res.json({ success: true, message: 'Cliente conectado com sessão salva!'});
         }
     });
+
     client.on('message', async (message) => {
         const chat = await message.getChat();
         if (message.from === 'status@broadcast' || chat.isGroup) {
             return;
         }
-        console.log('-----------------------------------------');
-        console.log(`[Usuário ID: ${clientId}] Mensagem recebida!`);
-        console.log(`De: ${message.from}`);
-        console.log(`Mensagem: "${message.body}"`);
-        console.log('>>> Pensando com a persona do banco...');
-        const aiResponse = await getAIResponse(message.body, clientId);
+
+        // --- PONTOS DE MELHORIA FUTURA ---
+        // TODO: Lógica de BLOQUEIO DE CONTATO virá aqui.
+        // TODO: Lógica de salvar/atualizar CONTATO no "mini-CRM" virá aqui.
+
+        const sessionData = sessions.get(clientId);
+        if (!sessionData) return;
+
+        const contactId = message.from;
+
+        // NOVO: Gerenciamento do histórico da conversa
+        if (!sessionData.chatHistories.has(contactId)) {
+            sessionData.chatHistories.set(contactId, []);
+        }
+        const chatHistory = sessionData.chatHistories.get(contactId);
+
+        // Adiciona a mensagem do usuário ao histórico
+        chatHistory.push({ role: 'user', content: message.body });
+
+        // Limita o histórico para não sobrecarregar a IA
+        if (chatHistory.length > 20) { // 10 do user + 10 da IA
+            chatHistory.splice(0, chatHistory.length - 20);
+        }
+
+        console.log(`>>> Pensando com a persona e histórico do contato ${contactId}...`);
+        const aiResponse = await getAIResponse(chatHistory, clientId); // Envia o histórico completo
+
+        // Adiciona a resposta da IA ao histórico
+        chatHistory.push({ role: 'model', content: aiResponse });
+
         console.log(`<<< Resposta da IA: "${aiResponse}"`);
-
-        // >>>>> LINHA ALTERADA AQUI <<<<<
-        await client.sendMessage(message.from, aiResponse); // Usa client.sendMessage em vez de message.reply
-
-        console.log('>>> Resposta enviada com sucesso!');
-        console.log('-----------------------------------------');
+        await client.sendMessage(message.from, aiResponse);
     });
+
     client.on('disconnected', (reason) => {
         console.log(`[Usuário ID: ${clientId}] Cliente foi desconectado. Razão:`, reason);
         sessions.delete(clientId);
         client.destroy();
     });
-    sessions.set(clientId, client);
+
     try {
         await client.initialize();
     } catch (error) {
@@ -315,7 +350,7 @@ app.get('/api/sessions/status', authenticateToken, async (req, res) => {
     if (!sessions.has(clientId)) {
         return res.json({ success: true, status: 'disconnected', message: 'Nenhuma sessão encontrada para este cliente.' });
     }
-    const client = sessions.get(clientId);
+    const client = sessions.get(clientId).client; // Pega o client de dentro da sessionData
     try {
         const status = await client.getState();
         res.json({ success: true, status: status, message: 'Status da sessão recuperado.' });
@@ -330,15 +365,17 @@ app.post('/api/sessions/stop', authenticateToken, async (req, res) => {
         return res.json({ success: true, message: 'Nenhuma sessão ativa para finalizar.' });
     }
     console.log(`[Usuário ID: ${clientId}] Finalizando sessão...`);
-    const client = sessions.get(clientId);
+    const client = sessions.get(clientId).client; // Pega o client de dentro da sessionData
     try {
         await client.logout();
+        // O evento 'disconnected' vai lidar com a limpeza da sessão
         res.json({ success: true, message: 'Sessão finalizada com sucesso.' });
     } catch (error) {
         sessions.delete(clientId); 
         res.status(500).json({ success: false, message: 'Erro ao finalizar a sessão.' });
     }
 });
+
 
 // PARTE FINAL: Inicia o servidor
 app.listen(PORT, () => {

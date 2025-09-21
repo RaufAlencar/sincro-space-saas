@@ -1,3 +1,4 @@
+// server.js - Versão 5.1: CRM e Blocklist
 require('dotenv').config();
 
 const express = require('express');
@@ -72,7 +73,10 @@ function authenticateToken(req, res, next) {
     if (token == null) return res.sendStatus(401);
 
     jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-        if (err) return res.sendStatus(403);
+        if (err) {
+            console.error('[ERRO JWT] Token inválido:', err.message);
+            return res.sendStatus(403);
+        }
         req.user = user;
         next();
     });
@@ -80,34 +84,58 @@ function authenticateToken(req, res, next) {
 
 app.post('/api/auth/register', async (req, res) => {
     const { email, password } = req.body;
-    if (!email || !password) return res.status(400).json({ success: false, message: 'Email e senha são obrigatórios.' });
+    if (!email || !password) {
+        return res.status(400).json({ success: false, message: 'Email e senha são obrigatórios.' });
+    }
     try {
-        const passwordHash = await bcrypt.hash(password, 10);
+        const saltRounds = 10;
+        const passwordHash = await bcrypt.hash(password, saltRounds);
         const newUser = await pool.query(
-            "INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email",
+            "INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email, created_at",
             [email, passwordHash]
         );
-        res.status(201).json({ success: true, user: newUser.rows[0] });
+        res.status(201).json({ 
+            success: true, 
+            message: 'Usuário cadastrado com sucesso!', 
+            user: newUser.rows[0] 
+        });
     } catch (error) {
-        if (error.code === '23505') return res.status(409).json({ success: false, message: 'Este email já está em uso.' });
+        console.error('[ERRO CADASTRO]', error);
+        if (error.code === '23505') {
+            return res.status(409).json({ success: false, message: 'Este email já está em uso.' });
+        }
         res.status(500).json({ success: false, message: 'Erro interno do servidor.' });
     }
 });
 
 app.post('/api/auth/login', async (req, res) => {
     const { email, password } = req.body;
-    if (!email || !password) return res.status(400).json({ success: false, message: 'Email e senha são obrigatórios.' });
+    if (!email || !password) {
+        return res.status(400).json({ success: false, message: 'Email e senha são obrigatórios.' });
+    }
     try {
         const userResult = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
-        if (userResult.rows.length === 0) return res.status(401).json({ success: false, message: 'Email ou senha inválidos.' });
-        
+        if (userResult.rows.length === 0) {
+            return res.status(401).json({ success: false, message: 'Email ou senha inválidos.' });
+        }
         const user = userResult.rows[0];
         const passwordMatch = await bcrypt.compare(password, user.password_hash);
-        if (!passwordMatch) return res.status(401).json({ success: false, message: 'Email ou senha inválidos.' });
-
-        const accessToken = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '7d' });
-        res.status(200).json({ success: true, accessToken, user: { id: user.id, email: user.email }});
+        if (!passwordMatch) {
+            return res.status(401).json({ success: false, message: 'Email ou senha inválidos.' });
+        }
+        const accessToken = jwt.sign(
+            { id: user.id, email: user.email },
+            process.env.JWT_SECRET,
+            { expiresIn: '7d' }
+        );
+        res.status(200).json({
+            success: true,
+            message: 'Login bem-sucedido!',
+            accessToken: accessToken,
+            user: { id: user.id, email: user.email }
+        });
     } catch (error) {
+        console.error('[ERRO LOGIN]', error);
         res.status(500).json({ success: false, message: 'Erro interno do servidor.' });
     }
 });
@@ -115,7 +143,10 @@ app.post('/api/auth/login', async (req, res) => {
 app.get('/api/auth/google', (req, res) => {
     const authorizeUrl = oAuth2Client.generateAuthUrl({
         access_type: 'offline',
-        scope: ['https://www.googleapis.com/auth/userinfo.profile', 'https://www.googleapis.com/auth/userinfo.email'],
+        scope: [
+            'https://www.googleapis.com/auth/userinfo.profile',
+            'https://www.googleapis.com/auth/userinfo.email',
+        ],
     });
     res.redirect(authorizeUrl);
 });
@@ -125,20 +156,27 @@ app.get('/api/auth/google/callback', async (req, res) => {
     try {
         const { tokens } = await oAuth2Client.getToken(code);
         oAuth2Client.setCredentials(tokens);
-        const userInfo = await oAuth2Client.request({ url: 'https://www.googleapis.com/oauth2/v3/userinfo' });
+        const userInfo = await oAuth2Client.request({
+            url: 'https://www.googleapis.com/oauth2/v3/userinfo',
+        });
         const email = userInfo.data.email;
-
         let userResult = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
         if (userResult.rows.length === 0) {
+            const placeholderHash = 'google_authenticated';
             userResult = await pool.query(
-                "INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING *",
-                [email, 'google_authenticated']
+                "INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email, created_at",
+                [email, placeholderHash]
             );
         }
         const user = userResult.rows[0];
-        const accessToken = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '7d' });
+        const accessToken = jwt.sign(
+            { id: user.id, email: user.email },
+            process.env.JWT_SECRET,
+            { expiresIn: '7d' }
+        );
         res.redirect(`${process.env.FRONTEND_URL}?token=${accessToken}`);
     } catch (error) {
+        console.error('[ERRO GOOGLE AUTH]', error);
         res.redirect(`${process.env.FRONTEND_URL}?error=auth_failed`);
     }
 });
@@ -146,20 +184,26 @@ app.get('/api/auth/google/callback', async (req, res) => {
 app.get('/api/config/persona', authenticateToken, async (req, res) => {
     try {
         const result = await pool.query("SELECT ai_persona FROM users WHERE id = $1", [req.user.id]);
-        if (result.rows.length === 0) return res.status(404).json({ success: false, message: "Usuário não encontrado." });
+        if (result.rows.length === 0) {
+            return res.status(404).json({ success: false, message: "Usuário não encontrado." });
+        }
         res.json({ success: true, persona: result.rows[0].ai_persona });
     } catch (error) {
+        console.error('[ERRO GET PERSONA]', error);
         res.status(500).json({ success: false, message: 'Erro ao buscar persona.' });
     }
 });
 
 app.put('/api/config/persona', authenticateToken, async (req, res) => {
     const { persona } = req.body;
-    if (typeof persona !== 'string') return res.status(400).json({ success: false, message: "O campo 'persona' é obrigatório." });
+    if (typeof persona !== 'string') {
+        return res.status(400).json({ success: false, message: "O campo 'persona' é obrigatório." });
+    }
     try {
         await pool.query("UPDATE users SET ai_persona = $1 WHERE id = $2", [persona, req.user.id]);
         res.json({ success: true, message: 'Persona atualizada com sucesso!' });
     } catch (error) {
+        console.error('[ERRO UPDATE PERSONA]', error);
         res.status(500).json({ success: false, message: 'Erro ao atualizar persona.' });
     }
 });
@@ -169,18 +213,24 @@ app.get('/api/blocklist', authenticateToken, async (req, res) => {
         const result = await pool.query("SELECT phone_number FROM blocked_contacts WHERE user_id = $1", [req.user.id]);
         res.json({ success: true, blocklist: result.rows.map(r => r.phone_number) });
     } catch (error) {
+        console.error('[ERRO GET BLOCKLIST]', error);
         res.status(500).json({ success: false, message: 'Erro ao buscar lista de bloqueio.' });
     }
 });
 
 app.post('/api/blocklist', authenticateToken, async (req, res) => {
     const { phoneNumber } = req.body;
-    if (!phoneNumber) return res.status(400).json({ success: false, message: 'Número de telefone é obrigatório.' });
+    if (!phoneNumber) {
+        return res.status(400).json({ success: false, message: 'Número de telefone é obrigatório.' });
+    }
     try {
         await pool.query("INSERT INTO blocked_contacts (user_id, phone_number) VALUES ($1, $2)", [req.user.id, phoneNumber]);
         res.status(201).json({ success: true, message: 'Contato bloqueado com sucesso.' });
     } catch (error) {
-        if (error.code === '23505') return res.status(409).json({ success: false, message: 'Este contato já está bloqueado.' });
+        console.error('[ERRO POST BLOCKLIST]', error);
+        if (error.code === '23505') {
+            return res.status(409).json({ success: false, message: 'Este contato já está bloqueado.' });
+        }
         res.status(500).json({ success: false, message: 'Erro ao bloquear contato.' });
     }
 });
@@ -191,15 +241,43 @@ app.delete('/api/blocklist/:phoneNumber', authenticateToken, async (req, res) =>
         await pool.query("DELETE FROM blocked_contacts WHERE user_id = $1 AND phone_number = $2", [req.user.id, phoneNumber]);
         res.json({ success: true, message: 'Contato desbloqueado.' });
     } catch (error) {
+        console.error('[ERRO DELETE BLOCKLIST]', error);
         res.status(500).json({ success: false, message: 'Erro ao desbloquear contato.' });
     }
 });
 
-app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
+app.get('/api/contacts', authenticateToken, async (req, res) => {
+    try {
+        const result = await pool.query("SELECT id, phone_number, name, tags FROM contacts WHERE user_id = $1 ORDER BY name", [req.user.id]);
+        res.json({ success: true, contacts: result.rows });
+    } catch (error) {
+        console.error('[ERRO GET CONTACTS]', error);
+        res.status(500).json({ success: false, message: 'Erro ao buscar contatos.' });
+    }
+});
+
+app.put('/api/contacts/:id', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    const { tags } = req.body;
+    if (!Array.isArray(tags)) {
+        return res.status(400).json({ success: false, message: "Tags devem ser um array." });
+    }
+    try {
+        await pool.query("UPDATE contacts SET tags = $1 WHERE id = $2 AND user_id = $3", [tags, id, req.user.id]);
+        res.json({ success: true, message: 'Tags atualizadas com sucesso!' });
+    } catch (error) {
+        console.error('[ERRO UPDATE CONTACTS]', error);
+        res.status(500).json({ success: false, message: 'Erro ao atualizar tags.' });
+    }
+});
+
+app.get('/api/health', (req, res) => res.json({ status: 'ok', message: 'Sincro.space API está no ar!' }));
 
 app.post('/api/sessions/start', authenticateToken, async (req, res) => {
     const clientId = req.user.id;
-    if (sessions.has(clientId)) return res.status(400).json({ success: false, message: 'Sessão já iniciada.' });
+    if (sessions.has(clientId)) {
+        return res.status(400).json({ success: false, message: 'Sessão já iniciada.' });
+    }
 
     console.log(`[Usuário ID: ${clientId}] Iniciando sessão...`);
     const client = new Client({
@@ -209,18 +287,28 @@ app.post('/api/sessions/start', authenticateToken, async (req, res) => {
     
     sessions.set(clientId, { client, chatHistories: new Map() });
 
+    let qrSent = false;
     client.on('qr', async (qr) => {
+        if(qrSent) return;
         try {
             const qrCodeDataUrl = await qrcode.toDataURL(qr);
-            if (!res.headersSent) res.json({ success: true, qrCodeDataUrl });
+            if (!res.headersSent) {
+                qrSent = true;
+                res.json({ success: true, message: 'QR Code gerado.', qrCodeDataUrl });
+            }
         } catch (err) {
-            if (!res.headersSent) res.status(500).json({ success: false, message: 'Erro ao gerar QR Code.' });
+            console.error(`[ERRO QR] Usuário ID ${clientId}:`, err);
+            if (!res.headersSent) {
+                res.status(500).json({ success: false, message: 'Erro ao gerar QR Code.' });
+            }
         }
     });
     
     client.on('ready', () => {
         console.log(`[Usuário ID: ${clientId}] Cliente conectado!`);
-        if (!res.headersSent) res.json({ success: true, message: 'Conectado com sessão salva!'});
+        if (!res.headersSent) {
+            res.json({ success: true, message: 'Conectado com sessão salva!'});
+        }
     });
 
     client.on('message', async (message) => {
@@ -274,16 +362,19 @@ app.post('/api/sessions/start', authenticateToken, async (req, res) => {
     try {
         await client.initialize();
     } catch (error) {
-        console.error(`[ERRO] Usuário ID ${clientId}:`, error);
+        console.error(`[ERRO Initialize] Usuário ID ${clientId}:`, error);
         sessions.delete(clientId);
-        if (!res.headersSent) res.status(500).json({ success: false, message: 'Falha ao inicializar sessão.' });
+        if (!res.headersSent) {
+            res.status(500).json({ success: false, message: 'Falha ao inicializar sessão.' });
+        }
     }
 });
 
 app.get('/api/sessions/status', authenticateToken, async (req, res) => {
     const clientId = req.user.id;
-    if (!sessions.has(clientId)) return res.json({ success: true, status: 'disconnected' });
-    
+    if (!sessions.has(clientId)) {
+        return res.json({ success: true, status: 'disconnected' });
+    }
     const client = sessions.get(clientId).client;
     try {
         const status = await client.getState();
@@ -295,8 +386,9 @@ app.get('/api/sessions/status', authenticateToken, async (req, res) => {
 
 app.post('/api/sessions/stop', authenticateToken, async (req, res) => {
     const clientId = req.user.id;
-    if (!sessions.has(clientId)) return res.json({ success: true, message: 'Nenhuma sessão ativa.' });
-
+    if (!sessions.has(clientId)) {
+        return res.json({ success: true, message: 'Nenhuma sessão ativa.' });
+    }
     const client = sessions.get(clientId).client;
     try {
         await client.logout();

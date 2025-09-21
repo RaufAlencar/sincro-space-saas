@@ -12,6 +12,7 @@ const saveFeedback = document.getElementById('save-feedback');
 const blockForm = document.getElementById('block-form');
 const blockInput = document.getElementById('block-input');
 const blockList = document.getElementById('block-list');
+const contactList = document.getElementById('contact-list');
 
 const getToken = () => localStorage.getItem('accessToken');
 
@@ -80,21 +81,48 @@ async function loadBlocklist() {
     }
 }
 
+async function loadContacts() {
+    try {
+        const data = await apiRequest('/api/contacts');
+        contactList.innerHTML = '';
+        if (data.success) {
+            data.contacts.forEach(renderContact);
+        }
+    } catch (error) {
+        console.error('Erro ao carregar contatos:', error);
+    }
+}
+
 function renderBlockedContact(phoneNumber) {
     const li = document.createElement('li');
     li.dataset.number = phoneNumber;
-    li.innerHTML = `
-        <span>${phoneNumber}</span>
-        <button class="unblock-btn">&times;</button>
-    `;
+    li.innerHTML = `<span>${phoneNumber}</span><button class="unblock-btn">&times;</button>`;
     blockList.appendChild(li);
+}
+
+function renderContact(contact) {
+    const li = document.createElement('li');
+    li.dataset.id = contact.id;
+    const tags = contact.tags || [];
+    const tagsHTML = tags.map(tag => `<span class="tag">${tag}</span>`).join('');
+    
+    li.innerHTML = `
+        <div class="contact-info">${contact.name}</div>
+        <div class="contact-number">${contact.phone_number}</div>
+        <div class="tags-display">${tagsHTML}</div>
+        <form class="tags-form">
+            <input type="text" class="tags-input" placeholder="cliente, vip, etc" value="${tags.join(', ')}">
+            <button type="submit">Salvar</button>
+        </form>
+    `;
+    contactList.appendChild(li);
 }
 
 savePersonaBtn.addEventListener('click', async () => {
     try {
         const data = await apiRequest('/api/config/persona', 'PUT', { persona: personaTextarea.value });
         if (data.success) {
-            saveFeedback.textContent = 'Salvo com sucesso!';
+            saveFeedback.textContent = 'Persona salva com sucesso!';
             saveFeedback.classList.remove('hidden');
             setTimeout(() => saveFeedback.classList.add('hidden'), 2000);
         }
@@ -136,6 +164,51 @@ blockList.addEventListener('click', async (e) => {
     }
 });
 
+contactList.addEventListener('click', async (e) => {
+    if (e.target.tagName === 'BUTTON' && e.target.closest('form').classList.contains('tags-form')) {
+        e.preventDefault();
+        const form = e.target.closest('form');
+        const listItem = form.closest('li');
+        const contactId = listItem.dataset.id;
+        const tagsInput = form.querySelector('.tags-input');
+        const tags = tagsInput.value.split(',').map(tag => tag.trim()).filter(Boolean);
+        
+        try {
+            const data = await apiRequest(`/api/contacts/${contactId}`, 'PUT', { tags });
+            if (data.success) {
+                const tagsDisplay = listItem.querySelector('.tags-display');
+                tagsDisplay.innerHTML = tags.map(tag => `<span class="tag">${tag}</span>`).join('');
+                alert('Tags salvas!');
+            }
+        } catch (error) {
+            console.error('Erro ao atualizar tags:', error);
+        }
+    }
+});
+
+connectBtn.addEventListener('click', async () => {
+    connectBtn.textContent = 'Gerando QR Code...';
+    connectBtn.disabled = true;
+    qrContainer.innerHTML = '';
+    try {
+        const data = await apiRequest('/api/sessions/start', 'POST');
+        if (data.success && data.qrCodeDataUrl) {
+            qrContainer.innerHTML = `<img src="${data.qrCodeDataUrl}" alt="QR Code">`;
+            connectBtn.classList.add('hidden');
+        } else if (data.message) {
+            alert(data.message);
+        }
+    } catch (error) {
+        console.error('Erro ao iniciar sessão:', error);
+    } finally {
+        connectBtn.textContent = 'Conectar WhatsApp';
+        connectBtn.disabled = false;
+        if (!qrContainer.hasChildNodes()){
+            connectBtn.classList.remove('hidden');
+        }
+    }
+});
+
 document.addEventListener('DOMContentLoaded', () => {
     const params = new URLSearchParams(window.location.search);
     const token = params.get('token');
@@ -157,6 +230,7 @@ function showAppSection() {
     fetchStatus();
     fetchPersona();
     loadBlocklist();
+    loadContacts();
 }
 
 function showLoginSection() {
@@ -164,21 +238,3 @@ function showLoginSection() {
     appSection.classList.add('hidden');
     localStorage.removeItem('accessToken');
 }
-
-connectBtn.addEventListener('click', async () => {
-    connectBtn.textContent = 'Gerando QR Code...';
-    connectBtn.disabled = true;
-    try {
-        const data = await apiRequest('/api/sessions/start', 'POST');
-        if (data.success && data.qrCodeDataUrl) {
-            qrContainer.innerHTML = `<img src="${data.qrCodeDataUrl}" alt="QR Code">`;
-        } else if (data.message) {
-            alert(data.message);
-        }
-    } catch (error) {
-        console.error('Erro ao iniciar sessão:', error);
-    } finally {
-        connectBtn.textContent = 'Conectar WhatsApp';
-        connectBtn.disabled = false;
-    }
-});

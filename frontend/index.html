@@ -15,26 +15,29 @@
         </div>
 
         <div id="app-section" class="hidden">
-            <h1>Painel de Controle</h1>
-            
-            <div id="status-indicator">
-                <span id="status-dot" class="status-dot offline"></span>
-                <span id="status-text">Desconectado</span>
-            </div>
+            <header>
+                <h1>Painel de Controle</h1>
+                <div id="status-indicator">
+                    <span id="status-dot" class="status-dot offline"></span>
+                    <span id="status-text">Desconectado</span>
+                </div>
+            </header>
 
             <div id="connection-controls">
                 <button id="connect-btn">Conectar WhatsApp</button>
                 <div id="qr-container"></div>
             </div>
 
-            <div class="main-panel">
+            <div class="panel-section">
+                <h2>Persona da IA</h2>
                 <div id="persona-editor">
-                    <h2>Persona da IA</h2>
                     <textarea id="persona-textarea" rows="10" placeholder="Descreva aqui a personalidade do seu clone digital..."></textarea>
                     <button id="save-persona-btn">Salvar Persona</button>
-                    <p id="save-feedback" class="feedback hidden">Salvo com sucesso!</p>
+                    <p id="save-feedback" class="feedback hidden"></p>
                 </div>
+            </div>
 
+            <div class="columns-section">
                 <div id="blocklist-manager">
                     <h2>Contatos Bloqueados</h2>
                     <form id="block-form">
@@ -42,6 +45,11 @@
                         <button type="submit">Bloquear</button>
                     </form>
                     <ul id="block-list"></ul>
+                </div>
+
+                <div id="crm-manager">
+                    <h2>Seus Contatos</h2>
+                    <ul id="contact-list"></ul>
                 </div>
             </div>
         </div>

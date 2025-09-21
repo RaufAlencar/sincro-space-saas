@@ -118,8 +118,8 @@ O frontend pode ser hospedado em qualquer serviço de sites estáticos, como Ver
 
 **Rauf Alencar de Oliveira**
 
-  * [LinkedIn](https://www.google.com/search?q=URL_DO_SEU_LINKEDIN_AQUI)
-  * [GitHub](https://www.google.com/search?q=URL_DO_SEU_GITHUB_AQUI)
+  
+  * [GitHub](https://www.google.com/search?q=https://github.com/RaufAlencar)
 
 <!-- end list -->
 

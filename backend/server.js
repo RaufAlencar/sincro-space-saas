@@ -18,7 +18,13 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
-app.use(cors());
+// Configuração de CORS mais específica
+const corsOptions = {
+  origin: process.env.FRONTEND_URL, // Puxa a URL do seu .env
+  optionsSuccessStatus: 200 
+};
+
+app.use(cors(corsOptions));
 
 // Configuração da Conexão com o Banco de Dados
 const pool = new Pool({

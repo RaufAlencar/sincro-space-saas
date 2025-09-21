@@ -18,7 +18,7 @@ body {
     border-radius: 15px;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
     width: 90%;
-    max-width: 600px;
+    max-width: 800px;
 }
 
 h1, h2 {
@@ -46,6 +46,8 @@ button:hover {
 button:disabled {
     background-color: #555;
     cursor: not-allowed;
+    transform: scale(1);
+    box-shadow: none;
 }
 
 #qr-container img {
@@ -77,8 +79,6 @@ button:disabled {
     display: none;
 }
 
-/* --- NOVOS ESTILOS --- */
-
 #status-indicator {
     display: flex;
     justify-content: center;
@@ -100,20 +100,34 @@ button:disabled {
 .status-dot.online { background-color: #23d160; }
 .status-dot.offline { background-color: #ff3860; }
 
-#persona-editor {
+.main-panel {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 40px;
     margin-top: 30px;
     text-align: left;
 }
 
-#persona-textarea {
+#persona-editor, #blocklist-manager {
+    display: flex;
+    flex-direction: column;
+}
+
+textarea, input[type="text"] {
     width: 100%;
     background-color: #2a2a2a;
     color: #e0e0e0;
     border: 1px solid #444;
     border-radius: 8px;
     padding: 10px;
-    box-sizing: border-box; /* Garante que o padding não aumente o tamanho */
+    box-sizing: border-box;
+    font-size: 14px;
+}
+
+#persona-textarea {
     resize: vertical;
+    min-height: 150px;
+    flex-grow: 1;
 }
 
 #save-persona-btn {
@@ -125,4 +139,51 @@ button:disabled {
     font-size: 14px;
     margin-top: 10px;
     text-align: center;
+    height: 1em;
+}
+
+#block-form {
+    display: flex;
+    gap: 10px;
+}
+
+#block-form input {
+    flex-grow: 1;
+}
+
+#block-form button {
+    margin-top: 0;
+    padding: 10px 15px;
+}
+
+#block-list {
+    list-style: none;
+    padding: 0;
+    margin-top: 15px;
+    background-color: #2a2a2a;
+    border-radius: 8px;
+    max-height: 150px;
+    overflow-y: auto;
+    flex-grow: 1;
+}
+
+#block-list li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 15px;
+    border-bottom: 1px solid #444;
+}
+
+#block-list li:last-child {
+    border-bottom: none;
+}
+
+.unblock-btn {
+    background: none;
+    border: none;
+    color: #ff3860;
+    cursor: pointer;
+    font-size: 18px;
+    padding: 0 5px;
 }

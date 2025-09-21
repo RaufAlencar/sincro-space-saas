@@ -10,7 +10,7 @@
     <div class="container">
         <div id="login-section">
             <h1>Bem-vindo ao Sincro.space</h1>
-            <p>Faça login para conectar seu Clone Digital.</p>
+            <p>Faça login para conectar seu Gêmeo Digital.</p>
             <a href="https://app-sincro-space.onrender.com/api/auth/google" class="google-btn">Entrar com Google</a>
         </div>
 
@@ -22,14 +22,27 @@
                 <span id="status-text">Desconectado</span>
             </div>
 
-            <button id="connect-btn">Conectar WhatsApp</button>
-            <div id="qr-container"></div>
+            <div id="connection-controls">
+                <button id="connect-btn">Conectar WhatsApp</button>
+                <div id="qr-container"></div>
+            </div>
 
-            <div id="persona-editor">
-                <h2>Persona da IA</h2>
-                <textarea id="persona-textarea" rows="10" placeholder="Descreva aqui a personalidade do seu clone digital..."></textarea>
-                <button id="save-persona-btn">Salvar Persona</button>
-                <p id="save-feedback" class="feedback hidden">Salvo com sucesso!</p>
+            <div class="main-panel">
+                <div id="persona-editor">
+                    <h2>Persona da IA</h2>
+                    <textarea id="persona-textarea" rows="10" placeholder="Descreva aqui a personalidade do seu clone digital..."></textarea>
+                    <button id="save-persona-btn">Salvar Persona</button>
+                    <p id="save-feedback" class="feedback hidden">Salvo com sucesso!</p>
+                </div>
+
+                <div id="blocklist-manager">
+                    <h2>Contatos Bloqueados</h2>
+                    <form id="block-form">
+                        <input type="text" id="block-input" placeholder="Ex: 5541999998888" required>
+                        <button type="submit">Bloquear</button>
+                    </form>
+                    <ul id="block-list"></ul>
+                </div>
             </div>
         </div>
     </div>

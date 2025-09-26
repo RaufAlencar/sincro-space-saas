@@ -28,7 +28,7 @@ app.use(cors(corsOptions));
 // Configuração do Pool do PostgreSQL com SSL ativado para produção.
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: true 
+    ssl: false 
 });
 
 async function testDBConnection() {

@@ -1,6 +1,5 @@
-// server.js - Versão 7.4 (Final)
-// - Código 100% limpo, sem comentários ambíguos.
-// - Utiliza o modelo de IA "gemini-1.0-pro" para máxima compatibilidade.
+// server.js - Versão 7.5 (Final)
+// - Adiciona configuração ao Pool do PostgreSQL para gerenciar conexões ociosas.
 
 require('dotenv').config();
 
@@ -29,7 +28,9 @@ const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: {
         rejectUnauthorized: false
-    }
+    },
+    max: 10, // Limita o número de clientes no pool
+    idleTimeoutMillis: 30000, // Fecha clientes ociosos após 30 segundos
 });
 
 async function testDBConnection() {

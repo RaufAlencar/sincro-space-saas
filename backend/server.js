@@ -1,5 +1,6 @@
-// server.js - Versão 9.1 (Modelo Flash)
-// - Altera o modelo para 'gemini-1.5-flash-latest' para garantir disponibilidade na região.
+// server.js - Versão 8.2 (Região EUA)
+// - Utiliza o modelo 'gemini-1.5-pro-latest'
+// - Deve ser usado com a location 'us-central1' no Render
 
 require('dotenv').config();
 
@@ -51,7 +52,7 @@ const vertex_ai = new VertexAI({
 });
 
 const model = vertex_ai.getGenerativeModel({
-    model: 'gemini-1.5-flash-latest', // <-- MUDANÇA FINAL AQUI
+    model: 'gemini-1.5-pro-latest',
 });
 
 const oAuth2Client = new OAuth2Client(
@@ -95,6 +96,7 @@ async function getAIResponse(chatHistory, userId) {
     }
 }
 
+// O restante do código, como rotas de autenticação, etc., continua aqui...
 function authenticateToken(req, res, next) {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];

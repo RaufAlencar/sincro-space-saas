@@ -1,5 +1,5 @@
-// server.js - Versão 7.5 (Definitiva)
-// - Inclui a biblioteca correta do Vertex AI para o Gemini.
+// server.js - Versão 8.0 (Definitiva)
+// - Utiliza a biblioteca correta (@google-cloud/vertexai) para a chave de API.
 // - Inclui a configuração otimizada do Pool do PostgreSQL para evitar ECONNREFUSED.
 
 require('dotenv').config();
@@ -45,7 +45,6 @@ async function testDBConnection() {
 
 const sessions = new Map();
 
-// Inicialização da IA com Vertex AI
 const vertex_ai = new VertexAI({
     project: process.env.GCP_PROJECT_ID, 
     location: process.env.GCP_LOCATION 

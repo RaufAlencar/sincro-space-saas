@@ -1,5 +1,6 @@
-// server.js - Versão 8.2 (Modelo Flash)
-// - Altera o modelo para 'gemini-1.5-flash-latest', um modelo rápido e com alta disponibilidade.
+// server.js - Versão 9.0 (Finalíssima)
+// - Utiliza o modelo de IA "gemini-pro" para máxima compatibilidade no Vertex AI.
+// - Contém todas as correções anteriores de banco de dados e autenticação.
 
 require('dotenv').config();
 
@@ -51,7 +52,7 @@ const vertex_ai = new VertexAI({
 });
 
 const model = vertex_ai.getGenerativeModel({
-    model: 'gemini-1.5-flash-latest', // <-- MUDANÇA FINAL AQUI
+    model: 'gemini-pro', // Usando o modelo mais universal do Vertex AI
 });
 
 const oAuth2Client = new OAuth2Client(
@@ -82,7 +83,13 @@ async function getAIResponse(chatHistory, userId) {
         const lastUserMessage = history[history.length - 1].parts[0].text;
         const result = await chat.sendMessage(lastUserMessage);
         const response = result.response;
-        return response.candidates[0].content.parts[0].text;
+        
+        if (response && response.candidates && response.candidates.length > 0 && response.candidates[0].content && response.candidates[0].content.parts && response.candidates[0].content.parts.length > 0) {
+            return response.candidates[0].content.parts[0].text;
+        } else {
+            console.error("ERRO DA IA: Resposta inválida ou sem conteúdo.", JSON.stringify(response, null, 2));
+            return "Desculpe, a IA não conseguiu gerar uma resposta no momento.";
+        }
     } catch (error) {
         console.error("ERRO DA IA:", error);
         return "Desculpe, ocorreu um erro na IA.";

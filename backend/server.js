@@ -51,7 +51,7 @@ const vertex_ai = new VertexAI({
 });
 
 const model = vertex_ai.getGenerativeModel({
-    model: 'gemini-1.5-pro-latest',
+    model: 'gemini-1.5-flash-latest',
 });
 
 const oAuth2Client = new OAuth2Client(

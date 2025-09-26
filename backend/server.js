@@ -1,15 +1,73 @@
-// server.js - Versão 5.1: CRM e Blocklist
+// server.js - Versão 6.1 (Final):
+
+
 require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
-const { Client, LocalAuth } = require('whatsapp-web.js');
+const { Client } = require('whatsapp-web.js');
+// Importação interna da BaseAuthStrategy. Pode ser frágil em futuras atualizações da lib.
+const { BaseAuthStrategy } = require('whatsapp-web.js/src/authStrategies/BaseAuthStrategy');
 const qrcode = require('qrcode');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { OAuth2Client } = require('google-auth-library');
+
+// --- Estratégia de Autenticação Persistente com PostgreSQL ---
+// Esta classe gerencia o salvamento e carregamento da sessão do WhatsApp
+// diretamente no banco de dados, eliminando a necessidade do LocalAuth e de arquivos.
+class PgAuthStrategy extends BaseAuthStrategy {
+    constructor(pool, userId) {
+        super();
+        this.pool = pool;
+        this.userId = userId;
+    }
+
+    async authenticate() {
+        try {
+            const { rows } = await this.pool.query(
+                'SELECT session_data FROM whatsapp_sessions WHERE user_id = $1',
+                [this.userId]
+            );
+
+            if (rows.length > 0) {
+                console.log(`[DB AUTH] Sessão para o usuário ${this.userId} encontrada no DB. Carregando...`);
+                return rows[0].session_data;
+            }
+            console.log(`[DB AUTH] Nenhuma sessão encontrada no DB para o usuário ${this.userId}.`);
+            return null;
+        } catch (error) {
+            console.error('[ERRO DB AUTH] Falha ao buscar sessão no DB:', error);
+            return null;
+        }
+    }
+
+    async onAuthenticationSuccess(session) {
+        try {
+            console.log(`[DB AUTH SUCCESS] Autenticado! Salvando sessão para o usuário ${this.userId} no DB...`);
+            await this.pool.query(
+                `INSERT INTO whatsapp_sessions (user_id, session_data)
+                 VALUES ($1, $2)
+                 ON CONFLICT (user_id)
+                 DO UPDATE SET session_data = $2, updated_at = NOW()`,
+                [this.userId, session]
+            );
+        } catch (error) {
+            console.error('[ERRO DB AUTH] Falha ao salvar sessão no DB:', error);
+        }
+    }
+    
+    async onLogout() {
+        try {
+            console.log(`[DB AUTH LOGOUT] Usuário ${this.userId} desconectado. Removendo sessão do DB...`);
+            await this.pool.query('DELETE FROM whatsapp_sessions WHERE user_id = $1', [this.userId]);
+        } catch (error) {
+            console.error('[ERRO DB AUTH] Falha ao remover sessão do DB durante o logout:', error);
+        }
+    }
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -22,11 +80,11 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 
+// Configuração do Pool do PostgreSQL com SSL ativado para produção.
+// A opção 'rejectUnauthorized: false' foi removida por segurança.
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: {
-        rejectUnauthorized: false
-    }
+    ssl: true 
 });
 
 async function testDBConnection() {
@@ -38,6 +96,8 @@ async function testDBConnection() {
     }
 }
 
+// O mapa 'sessions' agora funciona como um cache de clientes ATIVOS e CONECTADOS.
+// A fonte de verdade para a AUTENTICAÇÃO é o banco de dados.
 const sessions = new Map();
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY; 
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
@@ -82,6 +142,7 @@ function authenticateToken(req, res, next) {
     });
 }
 
+// --- ROTAS DE AUTENTICAÇÃO ---
 app.post('/api/auth/register', async (req, res) => {
     const { email, password } = req.body;
     if (!email || !password) {
@@ -181,6 +242,7 @@ app.get('/api/auth/google/callback', async (req, res) => {
     }
 });
 
+// --- ROTAS DE CONFIGURAÇÃO ---
 app.get('/api/config/persona', authenticateToken, async (req, res) => {
     try {
         const result = await pool.query("SELECT ai_persona FROM users WHERE id = $1", [req.user.id]);
@@ -208,6 +270,7 @@ app.put('/api/config/persona', authenticateToken, async (req, res) => {
     }
 });
 
+// --- ROTAS DE BLOCKLIST E CRM ---
 app.get('/api/blocklist', authenticateToken, async (req, res) => {
     try {
         const result = await pool.query("SELECT phone_number FROM blocked_contacts WHERE user_id = $1", [req.user.id]);
@@ -271,18 +334,28 @@ app.put('/api/contacts/:id', authenticateToken, async (req, res) => {
     }
 });
 
+// --- ROTA DE HEALTH CHECK (para o UptimeRobot) ---
 app.get('/api/health', (req, res) => res.json({ status: 'ok', message: 'Sincro.space API está no ar!' }));
 
+// --- ROTAS DE SESSÃO WHATSAPP (MODIFICADAS) ---
 app.post('/api/sessions/start', authenticateToken, async (req, res) => {
     const clientId = req.user.id;
     if (sessions.has(clientId)) {
-        return res.status(400).json({ success: false, message: 'Sessão já iniciada.' });
+        const existingClient = sessions.get(clientId).client;
+        try {
+            const state = await existingClient.getState();
+            if (state === 'CONNECTED') {
+                return res.status(400).json({ success: false, message: 'Sessão já está conectada e ativa.' });
+            }
+        } catch (e) {
+            console.log(`[Usuário ID: ${clientId}] Cliente existente em estado inválido. Recriando...`);
+        }
     }
 
     console.log(`[Usuário ID: ${clientId}] Iniciando sessão...`);
     const client = new Client({
-        authStrategy: new LocalAuth({ clientId: `session-${clientId}` }),
-        puppeteer: { headless: true, args: ['--no-sandbox'] }
+        authStrategy: new PgAuthStrategy(pool, clientId), // <-- A GRANDE MUDANÇA!
+        puppeteer: { headless: true, args: ['--no-sandbox', '--disable-gpu'] }
     });
     
     sessions.set(clientId, { client, chatHistories: new Map() });
@@ -291,6 +364,7 @@ app.post('/api/sessions/start', authenticateToken, async (req, res) => {
     client.on('qr', async (qr) => {
         if(qrSent) return;
         try {
+            console.log(`[Usuário ID: ${clientId}] Gerando QR Code...`);
             const qrCodeDataUrl = await qrcode.toDataURL(qr);
             if (!res.headersSent) {
                 qrSent = true;
@@ -305,10 +379,23 @@ app.post('/api/sessions/start', authenticateToken, async (req, res) => {
     });
     
     client.on('ready', () => {
-        console.log(`[Usuário ID: ${clientId}] Cliente conectado!`);
-        if (!res.headersSent) {
-            res.json({ success: true, message: 'Conectado com sessão salva!'});
+        console.log(`[Usuário ID: ${clientId}] Cliente conectado e pronto!`);
+        if (!res.headersSent && qrSent) {
+            console.log(`[Usuário ID: ${clientId}] Conexão 'ready' mas resposta já enviada.`);
+        } else if (!res.headersSent) {
+             res.json({ success: true, message: 'Conectado com sessão salva!'});
         }
+    });
+    
+    client.on('authenticated', () => {
+        console.log(`[Usuário ID: ${clientId}] Autenticação via sessão salva bem-sucedida.`);
+    });
+    
+    client.on('auth_failure', (msg) => {
+        console.error(`[Usuário ID: ${clientId}] FALHA DE AUTENTICAÇÃO: ${msg}`);
+        pool.query('DELETE FROM whatsapp_sessions WHERE user_id = $1', [clientId]);
+        sessions.delete(clientId);
+        client.destroy();
     });
 
     client.on('message', async (message) => {
@@ -356,7 +443,7 @@ app.post('/api/sessions/start', authenticateToken, async (req, res) => {
     client.on('disconnected', (reason) => {
         console.log(`[Usuário ID: ${clientId}] Cliente desconectado:`, reason);
         sessions.delete(clientId);
-        client.destroy();
+        client.destroy().catch(err => console.error(`[Usuário ID: ${clientId}] Erro ao destruir cliente na desconexão:`, err));
     });
 
     try {
@@ -372,33 +459,49 @@ app.post('/api/sessions/start', authenticateToken, async (req, res) => {
 
 app.get('/api/sessions/status', authenticateToken, async (req, res) => {
     const clientId = req.user.id;
-    if (!sessions.has(clientId)) {
-        return res.json({ success: true, status: 'disconnected' });
+    if (sessions.has(clientId)) {
+        const client = sessions.get(clientId).client;
+        try {
+            const status = await client.getState();
+            return res.json({ success: true, status });
+        } catch (error) {
+            console.error(`[ERRO STATUS] Usuário ${clientId}:`, error.message);
+            sessions.delete(clientId);
+            return res.json({ success: true, status: 'ERROR_STATE' });
+        }
     }
-    const client = sessions.get(clientId).client;
+
     try {
-        const status = await client.getState();
-        res.json({ success: true, status });
-    } catch (error) {
-        res.json({ success: true, status: 'unknown_error' });
+        const { rows } = await pool.query('SELECT 1 FROM whatsapp_sessions WHERE user_id = $1', [clientId]);
+        if (rows.length > 0) {
+            return res.json({ success: true, status: 'SAVED_BUT_DISCONNECTED' });
+        }
+    } catch (dbError) {
+        console.error('[ERRO DB STATUS]', dbError);
+        return res.status(500).json({ success: false, message: 'Erro ao verificar status da sessão.' });
     }
+    
+    return res.json({ success: true, status: 'NOT_INITIALIZED' });
 });
 
 app.post('/api/sessions/stop', authenticateToken, async (req, res) => {
     const clientId = req.user.id;
     if (!sessions.has(clientId)) {
-        return res.json({ success: true, message: 'Nenhuma sessão ativa.' });
+        return res.json({ success: true, message: 'Nenhuma sessão ativa para finalizar.' });
     }
     const client = sessions.get(clientId).client;
     try {
-        await client.logout();
-        res.json({ success: true, message: 'Sessão finalizada.' });
+        await client.logout(); 
+        res.json({ success: true, message: 'Sessão finalizada com sucesso.' });
     } catch (error) {
+        console.error(`[ERRO LOGOUT] Usuário ${clientId}:`, error);
         sessions.delete(clientId); 
+        client.destroy().catch(err => console.error(`[Usuário ID: ${clientId}] Erro ao destruir cliente no stop forçado:`, err));
         res.status(500).json({ success: false, message: 'Erro ao finalizar sessão.' });
     }
 });
 
+// --- INICIALIZAÇÃO DO SERVIDOR ---
 app.listen(PORT, () => {
     console.log(`Servidor do Sincro.space rodando na porta ${PORT}`);
     testDBConnection();

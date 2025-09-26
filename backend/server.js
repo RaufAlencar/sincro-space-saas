@@ -1,5 +1,6 @@
-// server.js - Versão 9.1 (Modelo Flash)
-// - Altera o modelo para 'gemini-1.5-flash-latest' para garantir disponibilidade na região.
+// server.js - Versão 10.0 (Solução Definitiva com API Key)
+// - Substitui VertexAI pela biblioteca GoogleGenerativeAI para autenticação direta com API Key.
+// - Simplifica a inicialização e a chamada da IA para contornar problemas de permissão.
 
 require('dotenv').config();
 
@@ -7,14 +8,14 @@ const express = require('express');
 const cors = require('cors');
 const { Client, LegacySessionAuth, NoAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode');
-const { VertexAI } = require('@google-cloud/vertexai');
+const { GoogleGenerativeAI } = require('@google/generative-ai'); // <-- MUDANÇA 1: Nova biblioteca
 const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { OAuth2Client } = require('google-auth-library');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000; // Alterado para a porta do Render
 
 app.use(express.json());
 
@@ -44,15 +45,9 @@ async function testDBConnection() {
 
 const sessions = new Map();
 
-// Inicialização da IA com Vertex AI
-const vertex_ai = new VertexAI({
-    project: 'gen-lang-client-0320408871',
-    location: 'us-central1'
-});
-
-const model = vertex_ai.getGenerativeModel({
-    model: 'gemini-1.5-flash-latest',
-});
+// <-- MUDANÇA 2: Inicialização da IA com API Key
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest"});
 
 const oAuth2Client = new OAuth2Client(
     process.env.GOOGLE_CLIENT_ID,
@@ -60,12 +55,13 @@ const oAuth2Client = new OAuth2Client(
     `${process.env.BACKEND_URL}/api/auth/google/callback`
 );
 
+// <-- MUDANÇA 3: Função de resposta da IA completamente nova
 async function getAIResponse(chatHistory, userId) {
     try {
         const personaResult = await pool.query("SELECT ai_persona FROM users WHERE id = $1", [userId]);
         if (personaResult.rows.length === 0) { return "Persona não configurada."; }
         const persona = personaResult.rows[0].ai_persona;
-        
+
         const history = chatHistory.map(msg => ({
             role: msg.role === 'model' ? 'model' : 'user',
             parts: [{ text: msg.content }]
@@ -73,27 +69,27 @@ async function getAIResponse(chatHistory, userId) {
 
         const chat = model.startChat({
             history: [
-                { role: 'user', parts: [{ text: persona }] },
-                { role: 'model', parts: [{ text: "Entendido. Estou pronto para assumir a persona e responder como tal." }] },
-                ...history.slice(0, -1)
-            ]
+                { role: 'user', parts: [{ text: `Assuma a seguinte persona e nunca saia dela: ${persona}` }] },
+                { role: 'model', parts: [{ text: "Entendido. Estou pronto." }] },
+                ...history.slice(0, -1) // Envia todo o histórico, menos a última mensagem do usuário
+            ],
+            generationConfig: {
+                maxOutputTokens: 1000, // Limita o tamanho da resposta para evitar excessos
+            },
         });
 
         const lastUserMessage = history[history.length - 1].parts[0].text;
         const result = await chat.sendMessage(lastUserMessage);
         const response = result.response;
         
-        if (response && response.candidates && response.candidates.length > 0 && response.candidates[0].content && response.candidates[0].content.parts && response.candidates[0].content.parts.length > 0) {
-            return response.candidates[0].content.parts[0].text;
-        } else {
-            console.error("ERRO DA IA: Resposta inválida ou sem conteúdo.", JSON.stringify(response, null, 2));
-            return "Desculpe, a IA não conseguiu gerar uma resposta no momento.";
-        }
+        return response.text();
+
     } catch (error) {
         console.error("ERRO DA IA:", error);
-        return "Desculpe, ocorreu um erro na IA.";
+        return "Desculpe, ocorreu um erro na IA. Tente novamente.";
     }
 }
+
 
 function authenticateToken(req, res, next) {
     const authHeader = req.headers['authorization'];

@@ -1,6 +1,6 @@
-// server.js - Versão 8.0 (Vertex AI)
-// - Utiliza a biblioteca correta (@google-cloud/vertexai) para a chave de API.
-// - Lê as novas variáveis de ambiente GCP_PROJECT_ID e GCP_LOCATION.
+// server.js - Versão 7.5 (Definitiva)
+// - Inclui a biblioteca correta do Vertex AI para o Gemini.
+// - Inclui a configuração otimizada do Pool do PostgreSQL para evitar ECONNREFUSED.
 
 require('dotenv').config();
 
@@ -8,7 +8,6 @@ const express = require('express');
 const cors = require('cors');
 const { Client, LegacySessionAuth, NoAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode');
-// NOVA IMPORTAÇÃO DA BIBLIOTECA CORRETA
 const { VertexAI } = require('@google-cloud/vertexai');
 const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
@@ -46,14 +45,14 @@ async function testDBConnection() {
 
 const sessions = new Map();
 
-// --- NOVA INICIALIZAÇÃO DA IA COM VERTEX AI ---
+// Inicialização da IA com Vertex AI
 const vertex_ai = new VertexAI({
     project: process.env.GCP_PROJECT_ID, 
     location: process.env.GCP_LOCATION 
 });
 
 const model = vertex_ai.getGenerativeModel({
-    model: 'gemini-1.5-pro-latest', // Agora podemos usar o modelo mais potente
+    model: 'gemini-1.5-pro-latest',
 });
 
 const oAuth2Client = new OAuth2Client(
@@ -77,7 +76,7 @@ async function getAIResponse(chatHistory, userId) {
             history: [
                 { role: 'user', parts: [{ text: persona }] },
                 { role: 'model', parts: [{ text: "Entendido. Estou pronto para assumir a persona e responder como tal." }] },
-                ...history.slice(0, -1) // Envia todo o histórico, exceto a última mensagem
+                ...history.slice(0, -1)
             ]
         });
 

@@ -1,5 +1,6 @@
-// server.js - Versão 7.2 (Modelo de IA Corrigido)
-// - Altera o modelo da Gemini para "gemini-pro" para garantir compatibilidade com a API Key.
+// server.js - Versão 7.4 (Final)
+// - Código 100% limpo, sem comentários ambíguos.
+// - Utiliza o modelo de IA "gemini-1.0-pro" para máxima compatibilidade.
 
 require('dotenv').config();
 
@@ -43,8 +44,7 @@ async function testDBConnection() {
 const sessions = new Map();
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY; 
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-// AJUSTE FINAL AQUI:
-const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" }); 
+const model = genAI.getGenerativeModel({ model: "gemini-1.0-pro" }); 
 
 const oAuth2Client = new OAuth2Client(
     process.env.GOOGLE_CLIENT_ID,
@@ -82,8 +82,6 @@ function authenticateToken(req, res, next) {
     });
 }
 
-// ... (todas as outras rotas permanecem exatamente as mesmas) ...
-// ROTAS DE AUTENTICAÇÃO
 app.post('/api/auth/register', async (req, res) => {
     const { email, password } = req.body;
     if (!email || !password) { return res.status(400).json({ success: false, message: 'Email e senha são obrigatórios.' }); }
@@ -145,7 +143,6 @@ app.get('/api/auth/google/callback', async (req, res) => {
     }
 });
 
-// ROTAS DE CONFIGURAÇÃO
 app.get('/api/config/persona', authenticateToken, async (req, res) => {
     try {
         const result = await pool.query("SELECT ai_persona FROM users WHERE id = $1", [req.user.id]);
@@ -169,7 +166,6 @@ app.put('/api/config/persona', authenticateToken, async (req, res) => {
     }
 });
 
-// ROTAS DE CRM E BLOCKLIST
 app.get('/api/blocklist', authenticateToken, async (req, res) => {
     try {
         const result = await pool.query("SELECT phone_number FROM blocked_contacts WHERE user_id = $1", [req.user.id]);
@@ -227,10 +223,8 @@ app.put('/api/contacts/:id', authenticateToken, async (req, res) => {
     }
 });
 
-// ROTA DE HEALTH CHECK
 app.get('/api/health', (req, res) => res.json({ status: 'ok', message: 'Sincro.space API está no ar!' }));
 
-// ROTAS DE SESSÃO DO WHATSAPP
 app.post('/api/sessions/start', authenticateToken, async (req, res) => {
     const clientId = req.user.id;
     if (sessions.has(clientId)) { return res.status(400).json({ success: false, message: 'Sessão já está em processo de inicialização ou ativa.' }); }
@@ -345,7 +339,6 @@ app.post('/api/sessions/stop', authenticateToken, async (req, res) => {
     }
 });
 
-// --- INICIALIZAÇÃO DO SERVIDOR ---
 app.listen(PORT, () => {
     console.log(`Servidor do Sincro.space rodando na porta ${PORT}`);
     testDBConnection();

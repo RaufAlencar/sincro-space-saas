@@ -46,8 +46,8 @@ const sessions = new Map();
 
 // Inicialização da IA com Vertex AI
 const vertex_ai = new VertexAI({
-    project: process.env.GCP_PROJECT_ID, 
-    location: process.env.GCP_LOCATION 
+    project: 'gen-lang-client-0320408871',
+    location: 'us-central1'
 });
 
 const model = vertex_ai.getGenerativeModel({

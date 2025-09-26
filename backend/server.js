@@ -1,13 +1,15 @@
-// server.js - Versão 7.5 (Final)
-// - Adiciona configuração ao Pool do PostgreSQL para gerenciar conexões ociosas.
+// server.js - Versão 8.0 (Vertex AI)
+// - Utiliza a biblioteca correta (@google-cloud/vertexai) para a chave de API.
+// - Lê as novas variáveis de ambiente GCP_PROJECT_ID e GCP_LOCATION.
 
 require('dotenv').config();
 
 const express = require('express');
-const cors =require('cors');
+const cors = require('cors');
 const { Client, LegacySessionAuth, NoAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+// NOVA IMPORTAÇÃO DA BIBLIOTECA CORRETA
+const { VertexAI } = require('@google-cloud/vertexai');
 const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
@@ -29,8 +31,8 @@ const pool = new Pool({
     ssl: {
         rejectUnauthorized: false
     },
-    max: 10, // Limita o número de clientes no pool
-    idleTimeoutMillis: 30000, // Fecha clientes ociosos após 30 segundos
+    max: 10,
+    idleTimeoutMillis: 30000,
 });
 
 async function testDBConnection() {
@@ -43,9 +45,16 @@ async function testDBConnection() {
 }
 
 const sessions = new Map();
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY; 
-const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-1.0-pro" }); 
+
+// --- NOVA INICIALIZAÇÃO DA IA COM VERTEX AI ---
+const vertex_ai = new VertexAI({
+    project: process.env.GCP_PROJECT_ID, 
+    location: process.env.GCP_LOCATION 
+});
+
+const model = vertex_ai.getGenerativeModel({
+    model: 'gemini-1.5-pro-latest', // Agora podemos usar o modelo mais potente
+});
 
 const oAuth2Client = new OAuth2Client(
     process.env.GOOGLE_CLIENT_ID,
@@ -58,11 +67,24 @@ async function getAIResponse(chatHistory, userId) {
         const personaResult = await pool.query("SELECT ai_persona FROM users WHERE id = $1", [userId]);
         if (personaResult.rows.length === 0) { return "Persona não configurada."; }
         const persona = personaResult.rows[0].ai_persona;
-        const formattedHistory = chatHistory.map(msg => `${msg.role}: ${msg.content}`).join('\n');
-        const prompt = `${persona}\n\nHistórico da conversa:\n${formattedHistory}\n\nResponda à última mensagem do "user":`;
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        return response.text();
+        
+        const history = chatHistory.map(msg => ({
+            role: msg.role === 'model' ? 'model' : 'user',
+            parts: [{ text: msg.content }]
+        }));
+
+        const chat = model.startChat({
+            history: [
+                { role: 'user', parts: [{ text: persona }] },
+                { role: 'model', parts: [{ text: "Entendido. Estou pronto para assumir a persona e responder como tal." }] },
+                ...history.slice(0, -1) // Envia todo o histórico, exceto a última mensagem
+            ]
+        });
+
+        const lastUserMessage = history[history.length - 1].parts[0].text;
+        const result = await chat.sendMessage(lastUserMessage);
+        const response = result.response;
+        return response.candidates[0].content.parts[0].text;
     } catch (error) {
         console.error("ERRO DA IA:", error);
         return "Desculpe, ocorreu um erro na IA.";

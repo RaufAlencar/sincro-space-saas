@@ -1,6 +1,5 @@
-// server.js - Versão 9.0 (Finalíssima)
-// - Utiliza o modelo de IA "gemini-pro" para máxima compatibilidade no Vertex AI.
-// - Contém todas as correções anteriores de banco de dados e autenticação.
+// server.js - Versão 9.1 (Modelo Flash)
+// - Altera o modelo para 'gemini-1.5-flash-latest' para garantir disponibilidade na região.
 
 require('dotenv').config();
 
@@ -52,7 +51,7 @@ const vertex_ai = new VertexAI({
 });
 
 const model = vertex_ai.getGenerativeModel({
-    model: 'gemini-pro', // Usando o modelo mais universal do Vertex AI
+    model: 'gemini-1.5-flash-latest', // <-- MUDANÇA FINAL AQUI
 });
 
 const oAuth2Client = new OAuth2Client(

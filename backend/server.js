@@ -1,6 +1,5 @@
-// server.js - Versão 8.2 (Região EUA)
-// - Utiliza o modelo 'gemini-1.5-pro-latest'
-// - Deve ser usado com a location 'us-central1' no Render
+// server.js - Versão 9.1 (Modelo Flash)
+// - Altera o modelo para 'gemini-1.5-flash-latest' para garantir disponibilidade na região.
 
 require('dotenv').config();
 
@@ -96,7 +95,6 @@ async function getAIResponse(chatHistory, userId) {
     }
 }
 
-// O restante do código, como rotas de autenticação, etc., continua aqui...
 function authenticateToken(req, res, next) {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];

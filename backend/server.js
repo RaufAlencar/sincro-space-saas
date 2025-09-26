@@ -21,7 +21,7 @@ app.use(express.json());
 
 const corsOptions = {
   origin: process.env.FRONTEND_URL,
-  optionsSuccessStatus: 200 
+  optionsSuccessStatus: 200
 };
 app.use(cors(corsOptions));
 

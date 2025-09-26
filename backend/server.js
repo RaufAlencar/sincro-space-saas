@@ -1,5 +1,5 @@
-// server.js - Versão 8.1 (Finalíssima)
-// - Altera o modelo para 'gemini-1.0-pro', o mais compatível no Vertex AI.
+// server.js - Versão 8.2 (Modelo Flash)
+// - Altera o modelo para 'gemini-1.5-flash-latest', um modelo rápido e com alta disponibilidade.
 
 require('dotenv').config();
 
@@ -51,7 +51,7 @@ const vertex_ai = new VertexAI({
 });
 
 const model = vertex_ai.getGenerativeModel({
-    model: 'gemini-1.0-pro',
+    model: 'gemini-1.5-flash-latest', // <-- MUDANÇA FINAL AQUI
 });
 
 const oAuth2Client = new OAuth2Client(

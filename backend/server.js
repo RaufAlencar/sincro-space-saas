@@ -44,7 +44,7 @@ const sessions = new Map();
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY; 
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 // AJUSTE FINAL AQUI:
-const model = genAI.getGenerativeModel({ model: "gemini-pro" }); 
+const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" }); 
 
 const oAuth2Client = new OAuth2Client(
     process.env.GOOGLE_CLIENT_ID,

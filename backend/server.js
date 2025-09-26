@@ -1,6 +1,5 @@
-// server.js - Versão 8.0 (Definitiva)
-// - Utiliza a biblioteca correta (@google-cloud/vertexai) para a chave de API.
-// - Inclui a configuração otimizada do Pool do PostgreSQL para evitar ECONNREFUSED.
+// server.js - Versão 8.1 (Debug)
+// - Adiciona console.log detalhados para rastrear o fluxo da IA e do envio de mensagens.
 
 require('dotenv').config();
 
@@ -45,7 +44,6 @@ async function testDBConnection() {
 
 const sessions = new Map();
 
-// Inicialização da IA com Vertex AI
 const vertex_ai = new VertexAI({
     project: process.env.GCP_PROJECT_ID, 
     location: process.env.GCP_LOCATION 
@@ -63,14 +61,20 @@ const oAuth2Client = new OAuth2Client(
 
 async function getAIResponse(chatHistory, userId) {
     try {
+        console.log('[DEBUG] 1. Entrando na função getAIResponse.');
         const personaResult = await pool.query("SELECT ai_persona FROM users WHERE id = $1", [userId]);
-        if (personaResult.rows.length === 0) { return "Persona não configurada."; }
+        if (personaResult.rows.length === 0) { 
+            console.log('[DEBUG] 1.1. Persona não encontrada para o usuário.');
+            return "Persona não configurada."; 
+        }
         const persona = personaResult.rows[0].ai_persona;
         
         const history = chatHistory.map(msg => ({
             role: msg.role === 'model' ? 'model' : 'user',
             parts: [{ text: msg.content }]
         }));
+
+        console.log('[DEBUG] 2. Histórico formatado para a IA:', JSON.stringify(history, null, 2));
 
         const chat = model.startChat({
             history: [
@@ -81,16 +85,23 @@ async function getAIResponse(chatHistory, userId) {
         });
 
         const lastUserMessage = history[history.length - 1].parts[0].text;
+        console.log('[DEBUG] 3. Última mensagem do usuário enviada para a IA:', lastUserMessage);
+        
         const result = await chat.sendMessage(lastUserMessage);
         const response = result.response;
-        return response.candidates[0].content.parts[0].text;
+        
+        console.log('[DEBUG] 4. Resposta completa da IA recebida:', JSON.stringify(response, null, 2));
+
+        const aiTextResponse = response.candidates[0].content.parts[0].text;
+        console.log('[DEBUG] 5. Texto extraído da resposta da IA:', aiTextResponse);
+        
+        return aiTextResponse;
     } catch (error) {
         console.error("ERRO DA IA:", error);
         return "Desculpe, ocorreu um erro na IA.";
     }
 }
 
-// O restante do código, como rotas de autenticação, etc., continua aqui...
 function authenticateToken(req, res, next) {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
@@ -289,29 +300,52 @@ app.post('/api/sessions/start', authenticateToken, async (req, res) => {
             if (client) client.destroy().catch(err => console.error(`[ID: ${clientId}] Erro ao destruir cliente:`, err));
         });
         client.on('message', async (message) => {
+            console.log(`--- [DEBUG] Nova Mensagem Recebida de ${message.from} ---`);
             const chat = await message.getChat();
-            if (message.from === 'status@broadcast' || chat.isGroup) return;
+            if (message.from === 'status@broadcast' || chat.isGroup) {
+                console.log('[DEBUG] Mensagem ignorada (status ou grupo).');
+                return;
+            }
             const sessionData = sessions.get(clientId);
-            if (!sessionData) return;
+            if (!sessionData) {
+                console.log('[DEBUG] Sessão não encontrada no mapa para o cliente.');
+                return;
+            }
             const contactId = message.from;
             const contactNumber = contactId.split('@')[0];
             try {
                 const isBlockedRes = await pool.query("SELECT 1 FROM blocked_contacts WHERE user_id = $1 AND phone_number = $2", [clientId, contactNumber]);
-                if (isBlockedRes.rows.length > 0) { return; }
+                if (isBlockedRes.rows.length > 0) { 
+                    console.log('[DEBUG] Contato está na blocklist. Ignorando.');
+                    return; 
+                }
+
                 const contactExists = await pool.query("SELECT 1 FROM contacts WHERE user_id = $1 AND phone_number = $2", [clientId, contactNumber]);
                 if (contactExists.rows.length === 0) {
                     const contactInfo = await message.getContact();
                     const name = contactInfo.pushname || contactInfo.name || contactNumber;
                     await pool.query("INSERT INTO contacts (user_id, phone_number, name) VALUES ($1, $2, $3)", [clientId, contactNumber, name]);
-                    console.log(`[Usuário ID: ${clientId}] Novo contato salvo: ${name} (${contactNumber})`);
+                    console.log(`[DEBUG] Novo contato salvo: ${name} (${contactNumber})`);
                 }
-                if (!sessionData.chatHistories.has(contactId)) { sessionData.chatHistories.set(contactId, []); }
+
+                if (!sessionData.chatHistories.has(contactId)) {
+                    sessionData.chatHistories.set(contactId, []);
+                }
                 const chatHistory = sessionData.chatHistories.get(contactId);
                 chatHistory.push({ role: 'user', content: message.body });
                 if (chatHistory.length > 20) chatHistory.splice(0, chatHistory.length - 20);
+                
+                console.log('[DEBUG] Chamando a função getAIResponse...');
                 const aiResponse = await getAIResponse(chatHistory, clientId);
-                chatHistory.push({ role: 'model', content: aiResponse });
-                await client.sendMessage(message.from, aiResponse);
+                
+                if (aiResponse && aiResponse.trim() !== '') {
+                    console.log(`[DEBUG] Enviando resposta para ${message.from}: "${aiResponse}"`);
+                    chatHistory.push({ role: 'model', content: aiResponse });
+                    await client.sendMessage(message.from, aiResponse);
+                    console.log('[DEBUG] Mensagem enviada com sucesso.');
+                } else {
+                    console.log('[DEBUG] Resposta da IA vazia ou nula. Nenhuma mensagem enviada.');
+                }
             } catch (dbError) {
                 console.error(`[ERRO DB on message] Usuário ID ${clientId}:`, dbError);
             }

@@ -45,6 +45,7 @@ async function testDBConnection() {
 
 const sessions = new Map();
 
+// Inicialização da IA com Vertex AI
 const vertex_ai = new VertexAI({
     project: process.env.GCP_PROJECT_ID, 
     location: process.env.GCP_LOCATION 
@@ -89,6 +90,7 @@ async function getAIResponse(chatHistory, userId) {
     }
 }
 
+// O restante do código, como rotas de autenticação, etc., continua aqui...
 function authenticateToken(req, res, next) {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];

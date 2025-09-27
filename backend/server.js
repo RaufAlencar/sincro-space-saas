@@ -98,7 +98,6 @@ async function getAIResponse(chatHistory, userId) {
     }
 }
 
-// O resto do código (rotas, etc.) permanece igual...
 function authenticateToken(req, res, next) {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
@@ -109,6 +108,7 @@ function authenticateToken(req, res, next) {
         next();
     });
 }
+
 app.post('/api/auth/register', async (req, res) => {
     const { email, password } = req.body;
     if (!email || !password) { return res.status(400).json({ success: false, message: 'Email e senha são obrigatórios.' }); }
@@ -122,6 +122,7 @@ app.post('/api/auth/register', async (req, res) => {
         res.status(500).json({ success: false, message: 'Erro interno do servidor.' });
     }
 });
+
 app.post('/api/auth/login', async (req, res) => {
     const { email, password } = req.body;
     if (!email || !password) { return res.status(400).json({ success: false, message: 'Email e senha são obrigatórios.' }); }
@@ -137,6 +138,7 @@ app.post('/api/auth/login', async (req, res) => {
         res.status(500).json({ success: false, message: 'Erro interno do servidor.' });
     }
 });
+
 app.get('/api/auth/google', (req, res) => {
     const authorizeUrl = oAuth2Client.generateAuthUrl({
         access_type: 'offline',
@@ -144,6 +146,7 @@ app.get('/api/auth/google', (req, res) => {
     });
     res.redirect(authorizeUrl);
 });
+
 app.get('/api/auth/google/callback', async (req, res) => {
     const { code } = req.query;
     try {
@@ -163,6 +166,7 @@ app.get('/api/auth/google/callback', async (req, res) => {
         res.redirect(`${process.env.FRONTEND_URL}?error=auth_failed`);
     }
 });
+
 app.get('/api/config/persona', authenticateToken, async (req, res) => {
     try {
         const result = await pool.query("SELECT ai_persona FROM users WHERE id = $1", [req.user.id]);
@@ -172,6 +176,7 @@ app.get('/api/config/persona', authenticateToken, async (req, res) => {
         res.status(500).json({ success: false, message: 'Erro ao buscar persona.' });
     }
 });
+
 app.put('/api/config/persona', authenticateToken, async (req, res) => {
     const { persona } = req.body;
     if (typeof persona !== 'string') { return res.status(400).json({ success: false, message: "O campo 'persona' é obrigatório." }); }
@@ -182,6 +187,7 @@ app.put('/api/config/persona', authenticateToken, async (req, res) => {
         res.status(500).json({ success: false, message: 'Erro ao atualizar persona.' });
     }
 });
+
 app.get('/api/blocklist', authenticateToken, async (req, res) => {
     try {
         const result = await pool.query("SELECT phone_number FROM blocked_contacts WHERE user_id = $1", [req.user.id]);
@@ -190,6 +196,7 @@ app.get('/api/blocklist', authenticateToken, async (req, res) => {
         res.status(500).json({ success: false, message: 'Erro ao buscar lista de bloqueio.' });
     }
 });
+
 app.post('/api/blocklist', authenticateToken, async (req, res) => {
     const { phoneNumber } = req.body;
     if (!phoneNumber) { return res.status(400).json({ success: false, message: 'Número de telefone é obrigatório.' }); }
@@ -201,6 +208,7 @@ app.post('/api/blocklist', authenticateToken, async (req, res) => {
         res.status(500).json({ success: false, message: 'Erro ao bloquear contato.' });
     }
 });
+
 app.delete('/api/blocklist/:phoneNumber', authenticateToken, async (req, res) => {
     const { phoneNumber } = req.params;
     try {
@@ -210,6 +218,7 @@ app.delete('/api/blocklist/:phoneNumber', authenticateToken, async (req, res) =>
         res.status(500).json({ success: false, message: 'Erro ao desbloquear contato.' });
     }
 });
+
 app.get('/api/contacts', authenticateToken, async (req, res) => {
     try {
         const result = await pool.query("SELECT id, phone_number, name, tags FROM contacts WHERE user_id = $1 ORDER BY name", [req.user.id]);
@@ -218,6 +227,7 @@ app.get('/api/contacts', authenticateToken, async (req, res) => {
         res.status(500).json({ success: false, message: 'Erro ao buscar contatos.' });
     }
 });
+
 app.put('/api/contacts/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
     const { tags } = req.body;
@@ -229,7 +239,9 @@ app.put('/api/contacts/:id', authenticateToken, async (req, res) => {
         res.status(500).json({ success: false, message: 'Erro ao atualizar tags.' });
     }
 });
+
 app.get('/api/health', (req, res) => res.json({ status: 'ok', message: 'Sincro.space API está no ar!' }));
+
 app.post('/api/sessions/start', authenticateToken, async (req, res) => {
     const clientId = req.user.id;
     if (sessions.has(clientId)) { return res.status(400).json({ success: false, message: 'Sessão já está em processo de inicialização ou ativa.' }); }
@@ -298,6 +310,7 @@ app.post('/api/sessions/start', authenticateToken, async (req, res) => {
         if (!res.headersSent) { res.status(500).json({ success: false, message: 'Erro interno ao inicializar o cliente.' }); }
     }
 });
+
 app.get('/api/sessions/status', authenticateToken, async (req, res) => {
     const clientId = req.user.id;
     if (sessions.has(clientId)) {
@@ -318,6 +331,7 @@ app.get('/api/sessions/status', authenticateToken, async (req, res) => {
     }
     return res.json({ success: true, status: 'NOT_INITIALIZED' });
 });
+
 app.post('/api/sessions/stop', authenticateToken, async (req, res) => {
     const clientId = req.user.id;
     if (!sessions.has(clientId)) { return res.json({ success: true, message: 'Nenhuma sessão ativa para finalizar.' }); }

@@ -1,4 +1,4 @@
-const API_BASE_URL = 'https://app-sincro-space.onrender.com';
+const API_BASE_URL = 'https://app-sincro-v2.onrender.com';
 
 const loginSection = document.getElementById('login-section');
 const appSection = document.getElementById('app-section');

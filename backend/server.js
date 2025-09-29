@@ -44,17 +44,52 @@ async function testDBConnection() {
 
 const sessions = new Map();
 
-// --- INICIALIZAÇÃO DA IA (MÉTODO COM VARIÁVEIS DE AMBIENTE) ---
-const vertex_ai = new VertexAI({
-  project: process.env.GOOGLE_PROJECT_ID, // Lê o ID "sincro-ai-novo"
-  location: 'us-central1',
-  credentials: JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) // Lê o JSON da variável
-});
+// --- INICIALIZAÇÃO DA IA (MÉTODO COM BASE64 - COM LOGS DE DIAGNÓSTICO) ---
+let vertex_ai;
+let model;
 
-const model = vertex_ai.getGenerativeModel({
-    model: 'gemini-1.5-flash-latest',
-});
-// ----------------------------------------------------
+try {
+    console.log('[DIAGNÓSTICO IA] Iniciando verificação de credenciais...');
+    
+    if (!process.env.GOOGLE_CREDENTIALS_BASE64) {
+        throw new Error('ETAPA 1 FALHOU: Variável de ambiente GOOGLE_CREDENTIALS_BASE64 não encontrada!');
+    }
+    console.log('[DIAGNÓSTICO IA] ETAPA 1 OK: Variável encontrada.');
+
+    let decodedJsonString;
+    try {
+        decodedJsonString = Buffer.from(process.env.GOOGLE_CREDENTIALS_BASE64, 'base64').toString('utf-8');
+        console.log('[DIAGNÓSTICO IA] ETAPA 2 OK: Base64 decodificado com sucesso.');
+    } catch (bufferError) {
+        throw new Error('ETAPA 2 FALHOU: O conteúdo da variável não é um Base64 válido.');
+    }
+
+    let credentials;
+    try {
+        credentials = JSON.parse(decodedJsonString);
+        console.log('[DIAGNÓSTICO IA] ETAPA 3 OK: String decodificada foi parseada para JSON com sucesso.');
+    } catch (jsonError) {
+        console.log('[DIAGNÓSTICO IA] CONTEÚDO DECODIFICADO (com erro):', decodedJsonString);
+        throw new Error('ETAPA 3 FALHOU: O conteúdo decodificado não é um JSON válido.');
+    }
+
+    vertex_ai = new VertexAI({
+        project: process.env.GOOGLE_PROJECT_ID,
+        location: 'us-central1',
+        credentials
+    });
+
+    model = vertex_ai.getGenerativeModel({
+        model: 'gemini-1.5-flash-latest',
+    });
+    console.log('[DIAGNÓSTICO IA] ETAPA 4 OK: Cliente Vertex AI inicializado com sucesso!');
+
+} catch (error) {
+    // Agora vamos logar o erro completo para ter mais detalhes
+    console.error('[ERRO IA FATAL] Não foi possível inicializar a IA. Detalhes abaixo:');
+    console.error(error);
+}
+// --------------------------------------------------------------------
 
 
 const oAuth2Client = new OAuth2Client(

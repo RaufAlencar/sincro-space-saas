@@ -44,7 +44,7 @@ async function testDBConnection() {
 
 const sessions = new Map();
 
-// --- INICIALIZAÇÃO DA IA (MÉTODO COM BASE64 - COM LOGS DE DIAGNÓSTICO) ---
+// --- INICIALIZAÇÃO DA IA (VERSÃO FINAL CORRIGIDA) ---
 let vertex_ai;
 let model;
 
@@ -73,7 +73,9 @@ try {
         throw new Error('ETAPA 3 FALHOU: O conteúdo decodificado não é um JSON válido.');
     }
 
+    // VERSÃO CORRIGIDA: Incluindo o project_id explicitamente
     vertex_ai = new VertexAI({
+        project: process.env.GOOGLE_PROJECT_ID, // ESSA LINHA É NECESSÁRIA
         location: 'us-central1',
         credentials
     });
@@ -84,12 +86,10 @@ try {
     console.log('[DIAGNÓSTICO IA] ETAPA 4 OK: Cliente Vertex AI inicializado com sucesso!');
 
 } catch (error) {
-    // Agora vamos logar o erro completo para ter mais detalhes
     console.error('[ERRO IA FATAL] Não foi possível inicializar a IA. Detalhes abaixo:');
     console.error(error);
 }
 // --------------------------------------------------------------------
-
 
 const oAuth2Client = new OAuth2Client(
     process.env.GOOGLE_CLIENT_ID,

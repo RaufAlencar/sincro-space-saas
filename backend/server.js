@@ -1,4 +1,4 @@
-// server.js - VERSÃO NÉCTAR (Autenticação Simplificada via API Key)
+// server.js - VERSÃO FINAL (2.0) - Autenticação Simplificada e Completo
 require('dotenv').config();
 
 // --- DEPENDÊNCIAS ---
@@ -6,7 +6,7 @@ const express = require('express');
 const cors = require('cors');
 const { Client, LegacySessionAuth, NoAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode');
-const { GoogleGenerativeAI } = require('@google/generative-ai'); // <-- BIBLIOTECA NOVA E SIMPLES
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
@@ -24,9 +24,19 @@ const pool = new Pool({
     ssl: { rejectUnauthorized: false }
 });
 
+// FUNÇÃO DE TESTE DO BANCO DE DADOS (QUE ESTAVA FALTANDO)
+async function testDBConnection() {
+    try {
+        await pool.query('SELECT NOW()');
+        console.log('[DB] Conexão com o banco de dados PostgreSQL bem-sucedida!');
+    } catch (error) {
+        console.error('[ERRO DB FATAL] Não foi possível conectar ao banco de dados:', error);
+    }
+}
+
 const sessions = new Map();
 
-// --- INICIALIZAÇÃO DA IA (MÉTODO NOVO E SIMPLIFICADO) ---
+// --- INICIALIZAÇÃO DA IA (MÉTODO SIMPLIFICADO) ---
 let model;
 try {
     if (!process.env.GEMINI_API_KEY) {
@@ -38,9 +48,8 @@ try {
 } catch (error) {
     console.error('[ERRO IA FATAL] Falha na inicialização do cliente Gemini AI:', error);
 }
-// --------------------------------------------------------------------
 
-// --- FUNÇÃO DA IA (ATUALIZADA PARA A NOVA BIBLIOTECA) ---
+// --- FUNÇÃO DA IA ---
 async function getAIResponse(chatHistory, userId) {
     if (!model) {
         console.error("ERRO DA IA: Tentativa de uso com modelo não inicializado.");
@@ -66,25 +75,21 @@ async function getAIResponse(chatHistory, userId) {
         const result = await chat.sendMessage(lastUserMessage);
         const response = result.response;
 
-        return response.text(); // <-- Resposta simplificada com a nova biblioteca
-
+        return response.text();
     } catch (error) {
         console.error("ERRO DA IA (durante chamada):", error);
         return "Desculpe, ocorreu um erro na comunicação com a IA.";
     }
 }
 
-
-// =======================================================================
-// O RESTANTE DO CÓDIGO (ROTAS, WHATSAPP, ETC) PERMANECE O MESMO
-// =======================================================================
-
+// --- CONFIGURAÇÃO DO LOGIN GOOGLE ---
 const oAuth2Client = new OAuth2Client(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
     `${process.env.BACKEND_URL}/api/auth/google/callback`
 );
 
+// --- MIDDLEWARE DE AUTENTICAÇÃO ---
 function authenticateToken(req, res, next) {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
@@ -96,10 +101,10 @@ function authenticateToken(req, res, next) {
     });
 }
 
-// Rota de Health Check
+// ================== ROTAS DA API ==================
+
 app.get('/api/health', (req, res) => res.json({ status: 'ok', message: 'Sincro.space API está no ar!' }));
 
-// Rotas de Autenticação (Login com Google, etc.)
 app.get('/api/auth/google', (req, res) => {
     const authorizeUrl = oAuth2Client.generateAuthUrl({
         access_type: 'offline',
@@ -109,6 +114,7 @@ app.get('/api/auth/google', (req, res) => {
 });
 
 app.get('/api/auth/google/callback', async (req, res) => {
+    // ... (código do callback do google que já funciona)
     const { code } = req.query;
     try {
         const { tokens } = await oAuth2Client.getToken(code);
@@ -151,44 +157,34 @@ app.put('/api/config/persona', async (req, res) => {
     }
 });
 
-// Rotas de Sessão do WhatsApp
 app.post('/api/sessions/start', async (req, res) => {
     const clientId = req.user.id;
     if (sessions.has(clientId)) { return res.status(400).json({ success: false, message: 'Sessão já ativa ou iniciando.' }); }
-
     try {
         const { rows } = await pool.query('SELECT session_data FROM whatsapp_sessions WHERE user_id = $1', [clientId]);
         const client = new Client({
             authStrategy: rows.length > 0 ? new LegacySessionAuth({ session: rows[0].session_data }) : new NoAuth(),
             puppeteer: { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu'] }
         });
-
         sessions.set(clientId, { client, chatHistories: new Map() });
-        let qrSent = false;
 
         client.on('qr', async (qr) => {
-            if (qrSent) return;
-            qrSent = true;
             const qrCodeDataUrl = await qrcode.toDataURL(qr);
             if (!res.headersSent) res.json({ success: true, qrCodeDataUrl });
         });
-
         client.on('authenticated', (session) => {
             if (session) pool.query(`INSERT INTO whatsapp_sessions (user_id, session_data) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET session_data = $2`, [clientId, session]);
         });
-
         client.on('ready', () => {
             console.log(`[Usuário ID: ${clientId}] Cliente conectado e pronto!`);
-            if (!qrSent && !res.headersSent) res.json({ success: true, message: 'Conectado com sessão salva!' });
+            if (!res.headersSent) res.json({ success: true, message: 'Conectado com sessão salva!' });
         });
-
         client.on('disconnected', (reason) => {
             if (reason === 'LOGGED_OUT') pool.query('DELETE FROM whatsapp_sessions WHERE user_id = $1', [clientId]);
             sessions.delete(clientId);
             if (client) client.destroy().catch(() => {});
             console.log(`[Usuário ID: ${clientId}] Cliente desconectado.`);
         });
-
         client.on('message', async (message) => {
             const chat = await message.getChat();
             if (chat.isGroup) return;
@@ -209,11 +205,10 @@ app.post('/api/sessions/start', async (req, res) => {
         });
 
         await client.initialize();
-
     } catch (error) {
-        console.error(`[ID: ${clientId}] Erro crítico ao iniciar sessão:`, error);
+        console.error(`[ID: ${clientId}] Erro ao iniciar sessão:`, error);
         sessions.delete(clientId);
-        if (!res.headersSent) res.status(500).json({ success: false, message: 'Erro interno ao inicializar cliente.' });
+        if (!res.headersSent) res.status(500).json({ success: false, message: 'Erro interno ao iniciar cliente.' });
     }
 });
 
@@ -228,12 +223,16 @@ app.get('/api/sessions/status', async (req, res) => {
             return res.json({ success: true, status: 'ERROR_STATE' });
         }
     }
-    const { rows } = await pool.query('SELECT 1 FROM whatsapp_sessions WHERE user_id = $1', [clientId]);
-    return res.json({ success: true, status: rows.length > 0 ? 'SAVED_BUT_DISCONNECTED' : 'NOT_INITIALIZED' });
+    try {
+        const { rows } = await pool.query('SELECT 1 FROM whatsapp_sessions WHERE user_id = $1', [clientId]);
+        return res.json({ success: true, status: rows.length > 0 ? 'SAVED_BUT_DISCONNECTED' : 'NOT_INITIALIZED' });
+    } catch (dbError) {
+        return res.status(500).json({ success: false, message: 'Erro ao buscar sessão no DB.' });
+    }
 });
 
-// Inicialização do Servidor
+// --- INICIALIZAÇÃO DO SERVIDOR ---
 app.listen(PORT, () => {
     console.log(`Servidor do Sincro.space rodando na porta ${PORT}`);
-    testDBConnection();
+    testDBConnection(); // <-- A CHAMADA PARA A FUNÇÃO QUE EXISTE
 });

@@ -223,10 +223,12 @@ app.get('/api/sessions/status', async (req, res) => {
             return res.json({ success: true, status: 'ERROR_STATE' });
         }
     }
+    // O try...catch que estava faltando foi adicionado aqui
     try {
         const { rows } = await pool.query('SELECT 1 FROM whatsapp_sessions WHERE user_id = $1', [clientId]);
         return res.json({ success: true, status: rows.length > 0 ? 'SAVED_BUT_DISCONNECTED' : 'NOT_INITIALIZED' });
     } catch (dbError) {
+        console.error(`[ERRO DB /status] Usuário ID ${clientId}:`, dbError);
         return res.status(500).json({ success: false, message: 'Erro ao buscar sessão no DB.' });
     }
 });

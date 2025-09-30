@@ -50,7 +50,7 @@ try {
         credentials
     });
 
-    model = vertex_ai.getGenerativeModel({ model: 'gemini-1.5-flash-latest' });
+    model = vertex_ai.preview.getGenerativeModel({ model: 'gemini-1.5-flash-latest' });
     console.log('[IA] Cliente Vertex AI inicializado com sucesso via Conta de Serviço!');
 } catch (error) {
     console.error('[ERRO IA FATAL] Falha na inicialização do cliente Vertex AI.', error);

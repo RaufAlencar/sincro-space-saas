@@ -1,4 +1,4 @@
-// server.js - VERSÃO FINAL (2.0) - Autenticação Simplificada e Completo
+// server.js - VERSÃO FINAL E DEFINITIVA (Conta de Serviço + Projeto Limpo)
 require('dotenv').config();
 
 // --- DEPENDÊNCIAS ---
@@ -6,7 +6,7 @@ const express = require('express');
 const cors = require('cors');
 const { Client, LegacySessionAuth, NoAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { VertexAI } = require('@google-cloud/vertexai'); // Biblioteca correta para Conta de Serviço
 const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
@@ -24,7 +24,6 @@ const pool = new Pool({
     ssl: { rejectUnauthorized: false }
 });
 
-// FUNÇÃO DE TESTE DO BANCO DE DADOS (QUE ESTAVA FALTANDO)
 async function testDBConnection() {
     try {
         await pool.query('SELECT NOW()');
@@ -36,28 +35,36 @@ async function testDBConnection() {
 
 const sessions = new Map();
 
-// --- INICIALIZAÇÃO DA IA (MÉTODO SIMPLIFICADO) ---
+// --- INICIALIZAÇÃO DA IA (MÉTODO CORRETO E FINAL) ---
 let model;
 try {
-    if (!process.env.GEMINI_API_KEY) {
-        throw new Error('Variável de ambiente GEMINI_API_KEY não foi encontrada!');
+    if (!process.env.GOOGLE_CREDENTIALS_BASE64 || !process.env.GOOGLE_PROJECT_ID) {
+        throw new Error('As variáveis de ambiente GOOGLE_CREDENTIALS_BASE64 e GOOGLE_PROJECT_ID são obrigatórias.');
     }
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
-    console.log('[IA] Cliente Gemini AI inicializado com sucesso via API Key!');
-} catch (error) {
-    console.error('[ERRO IA FATAL] Falha na inicialização do cliente Gemini AI:', error);
-}
+    const decodedJsonString = Buffer.from(process.env.GOOGLE_CREDENTIALS_BASE64, 'base64').toString('utf-8');
+    const credentials = JSON.parse(decodedJsonString);
 
-// --- FUNÇÃO DA IA ---
+    const vertex_ai = new VertexAI({
+        project: process.env.GOOGLE_PROJECT_ID,
+        location: 'us-central1',
+        credentials
+    });
+
+    model = vertex_ai.getGenerativeModel({ model: 'gemini-1.5-flash-latest' });
+    console.log('[IA] Cliente Vertex AI inicializado com sucesso via Conta de Serviço!');
+} catch (error) {
+    console.error('[ERRO IA FATAL] Falha na inicialização do cliente Vertex AI.', error);
+}
+// --------------------------------------------------------------------
+
+// --- FUNÇÃO DA IA (MÉTODO CORRETO E FINAL) ---
 async function getAIResponse(chatHistory, userId) {
     if (!model) {
-        console.error("ERRO DA IA: Tentativa de uso com modelo não inicializado.");
-        return "Desculpe, a IA não está disponível no momento devido a um erro de configuração.";
+        return "Desculpe, a IA não está disponível (erro de inicialização).";
     }
     try {
         const personaResult = await pool.query("SELECT ai_persona FROM users WHERE id = $1", [userId]);
-        const persona = personaResult.rows.length > 0 ? personaResult.rows[0].ai_persona : "Você é um assistente prestativo.";
+        const persona = personaResult.rows.length > 0 && personaResult.rows[0].ai_persona ? personaResult.rows[0].ai_persona : "Você é um assistente prestativo.";
 
         const historyForModel = chatHistory.map(msg => ({
             role: msg.role, parts: [{ text: msg.content }]
@@ -75,7 +82,11 @@ async function getAIResponse(chatHistory, userId) {
         const result = await chat.sendMessage(lastUserMessage);
         const response = result.response;
 
-        return response.text();
+        if (response?.candidates?.[0]?.content?.parts?.[0]?.text) {
+            return response.candidates[0].content.parts[0].text;
+        }
+        console.error("ERRO DA IA: Resposta da API veio em formato inesperado.", JSON.stringify(response, null, 2));
+        return "Não consegui gerar uma resposta no momento.";
     } catch (error) {
         console.error("ERRO DA IA (durante chamada):", error);
         return "Desculpe, ocorreu um erro na comunicação com a IA.";
@@ -114,7 +125,6 @@ app.get('/api/auth/google', (req, res) => {
 });
 
 app.get('/api/auth/google/callback', async (req, res) => {
-    // ... (código do callback do google que já funciona)
     const { code } = req.query;
     try {
         const { tokens } = await oAuth2Client.getToken(code);
@@ -223,7 +233,6 @@ app.get('/api/sessions/status', async (req, res) => {
             return res.json({ success: true, status: 'ERROR_STATE' });
         }
     }
-    // O try...catch que estava faltando foi adicionado aqui
     try {
         const { rows } = await pool.query('SELECT 1 FROM whatsapp_sessions WHERE user_id = $1', [clientId]);
         return res.json({ success: true, status: rows.length > 0 ? 'SAVED_BUT_DISCONNECTED' : 'NOT_INITIALIZED' });
@@ -236,5 +245,5 @@ app.get('/api/sessions/status', async (req, res) => {
 // --- INICIALIZAÇÃO DO SERVIDOR ---
 app.listen(PORT, () => {
     console.log(`Servidor do Sincro.space rodando na porta ${PORT}`);
-    testDBConnection(); // <-- A CHAMADA PARA A FUNÇÃO QUE EXISTE
+    testDBConnection();
 });
